@@ -1,5 +1,6 @@
 import java.io.*;
 import java.util.ArrayList;
+import java.lang.reflect.Field;
 import java.util.*;
 /*
     Implementação do algoritmo de busca em profundidade (DFS) para grafos direcionados.
@@ -63,15 +64,26 @@ class Vertice{
     }
 
     public void ordenar(){
-        for(int i = 0; i < sucessao.size(); i++){
-            for(int j = 0; j < sucessao.size() - 1; j++){
-                if(sucessao.get(j) > sucessao.get(j+1)){
-                    int temp = sucessao.get(j);
-                    sucessao.set(j, sucessao.get(j+1));
-                    sucessao.set(j+1, temp);
-                }
-            }
+        Collections.sort(sucessao);
+        Collections.sort(predecessao);
+    }
+
+    public void inserirOrdenado(int valor) {
+        // Encontra a posição correta para manter a lista ordenada
+        int pos = 0;
+        while (pos < predecessao.size() && predecessao.get(pos) < valor) {
+            pos++;
         }
+        predecessao.add(pos, valor);
+        while (pos < sucessao.size() && sucessao.get(pos) < valor) {
+            pos++;
+        }
+        sucessao.add(pos, valor);
+    }
+
+    public void remover(int valor) {
+        sucessao.remove(Integer.valueOf(valor));
+        predecessao.remove(Integer.valueOf(valor));
     }
 }
 
@@ -96,6 +108,8 @@ class Grafos {
                 int pai = leitor.nextInt();
                 int filho = leitor.nextInt();
                 grafo[pai].inserirS(filho);
+                grafo[pai].inserirP(filho);
+                grafo[filho].inserirS(pai);
                 grafo[filho].inserirP(pai);
             }
             for(int i = 1; i <= vertice; i++){
@@ -254,28 +268,35 @@ public class DFS {
 
     public static void buscaProfundidadeTarjan(Vertice v, int p) {
         t++;
-        td[v.vertice] = low[v.vertice] = t; // Inicializa ambos com o tempo atual
-
+        td[v.vertice] = low[v.vertice] = t;
+        // Controla arestas paralelas de volta ao pai
+        int vezesVoltouAoPai = 0;
+ 
         for (int ws : v.getSucessores()) {
-            if (ws != p){
-                Vertice w = Grafos.grafo[ws];
-                if (td[w.vertice] == 0) { // Aresta de arvore (nao visitado)
-                    pai[w.vertice] = v.vertice;
-                    arestas.add(new Arestas(v, w, "árvore"));
-                    
-                    buscaProfundidadeTarjan(w, v.vertice);
-
-                    // Na volta da recursão, o pai herda o menor tempo alcançado pelo filho
-                    low[v.vertice] = Math.min(low[v.vertice], low[w.vertice]);
-                } 
-                else if (td[w.vertice] < td[v.vertice]) {
-                    // Aresta de Retorno: atualiza low apenas para ancestrais
+            Vertice w = Grafos.grafo[ws];
+            if (td[w.vertice] == 0) {
+                // Vizinho não visitado: aresta de árvore
+                pai[w.vertice] = v.vertice;
+                arestas.add(new Arestas(v, w, "árvore"));
+                buscaProfundidadeTarjan(w, v.vertice);
+                // Propaga o menor low do filho para o pai
+                low[v.vertice] = Math.min(low[v.vertice], low[w.vertice]);
+            } else if (ws == p) {
+                // É a aresta de volta ao pai — só ignora UMA vez (a da árvore)
+                // Se aparecer de novo (aresta paralela), trata como retorno normal
+                if (vezesVoltouAoPai == 0) {
+                    vezesVoltouAoPai++;
+                } else {
                     low[v.vertice] = Math.min(low[v.vertice], td[w.vertice]);
-                    arestas.add(new Arestas(v, w, "retorno"));
                 }
+            } else {
+                // Vizinho já visitado que não é o pai: aresta de retorno
+                low[v.vertice] = Math.min(low[v.vertice], td[w.vertice]);
+                arestas.add(new Arestas(v, w, "retorno"));
             }
         }
     }
+
 
     public static void dfs() {
         t = 0;
@@ -319,12 +340,6 @@ public class DFS {
                 pai[v.vertice] = 0;
             }
         }
-
-        if (op >= 1 && op <= Grafos.vertice && td[op] == 0) {
-            buscaProfundidade(Grafos.grafo[op]);
-            Grafos.componentes += 1;
-        }
-
         for(int i = 1; i <= Grafos.vertice; i++){
             if(td[i] == 0){
                 buscaProfundidade(Grafos.grafo[i]);
