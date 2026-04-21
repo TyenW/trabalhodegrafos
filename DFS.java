@@ -1,6 +1,5 @@
 import java.io.*;
 import java.util.ArrayList;
-import java.lang.reflect.Field;
 import java.util.*;
 /*
     Implementação do algoritmo de busca em profundidade (DFS) para grafos direcionados.
@@ -260,7 +259,7 @@ public class DFS {
         for (int ws : v.getSucessores()) {
             if (ws != p){
                 Vertice w = Grafos.grafo[ws];
-                if (td[w.vertice] == 0) { // Aresta de Árvore (não visitado)
+                if (td[w.vertice] == 0) { // Aresta de arvore (nao visitado)
                     pai[w.vertice] = v.vertice;
                     arestas.add(new Arestas(v, w, "árvore"));
                     
@@ -320,6 +319,12 @@ public class DFS {
                 pai[v.vertice] = 0;
             }
         }
+
+        if (op >= 1 && op <= Grafos.vertice && td[op] == 0) {
+            buscaProfundidade(Grafos.grafo[op]);
+            Grafos.componentes += 1;
+        }
+
         for(int i = 1; i <= Grafos.vertice; i++){
             if(td[i] == 0){
                 buscaProfundidade(Grafos.grafo[i]);

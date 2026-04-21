@@ -16,13 +16,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.charset.StandardCharsets;
 
-
-
-class geradorgrafos{
+class geradorgrafos {
     static final Map<String, Integer> proximoIndicePorPasta = new HashMap<String, Integer>();
     static final int IO_BUFFER_BYTES = 1 << 20;
-    static final int[] OPCOES_TIPO = new int[]{1, 2, 3};
-    static final int[] OPCOES_VERTICES = new int[]{1, 2, 3, 4};
+    static final int[] OPCOES_TIPO = new int[] { 1, 2, 3 };
+    static final int[] OPCOES_VERTICES = new int[] { 1, 2, 3, 4 };
 
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
@@ -42,8 +40,8 @@ class geradorgrafos{
                     for (int opcaoVertices : OPCOES_VERTICES) {
                         System.out.println();
                         System.out.println(">>> Gerando " + quantidadePorCombinacao + " grafos para tipo="
-                            + tipoDeGrafoPorOpcao(tipo)
-                            + " com " + verticesPorOpcao(opcaoVertices) + " vértices");
+                                + tipoDeGrafoPorOpcao(tipo)
+                                + " com " + verticesPorOpcao(opcaoVertices) + " vértices");
                         gerarLote(quantidadePorCombinacao, tipo, opcaoVertices);
                     }
                 }
@@ -85,9 +83,11 @@ class geradorgrafos{
                 default:
                     System.out.println("Opção inválida.");
             }
-            atualizarLoadingTerminalDetalhado(i, quantidadeGrafos, inicioLote, inicioGrafo, "gerado em memória", grafo.vertices, grafo.arestas);
+            atualizarLoadingTerminalDetalhado(i, quantidadeGrafos, inicioLote, inicioGrafo, "gerado em memória",
+                    grafo.vertices, grafo.arestas);
             registrarGrafoEmArquivo(grafo, op1, i + 1, quantidadeGrafos, inicioLote, inicioGrafo);
-            atualizarLoadingTerminalDetalhado(i + 1, quantidadeGrafos, inicioLote, inicioGrafo, "concluído", grafo.vertices, grafo.arestas);
+            atualizarLoadingTerminalDetalhado(i + 1, quantidadeGrafos, inicioLote, inicioGrafo, "concluído",
+                    grafo.vertices, grafo.arestas);
         }
 
         if (quantidadeGrafos > 0) {
@@ -111,12 +111,14 @@ class geradorgrafos{
         }
     }
 
-    static void registrarGrafoEmArquivo(Grafo grafo, int op1, int indiceAtual, int total, long inicioLote, long inicioGrafo) {
+    static void registrarGrafoEmArquivo(Grafo grafo, int op1, int indiceAtual, int total, long inicioLote,
+            long inicioGrafo) {
         String tipoDeGrafo = tipoDeGrafoPorOpcao(op1);
         String nomePastaBase = "grafos" + grafo.vertices + tipoDeGrafo;
 
         try {
-            atualizarLoadingTerminalDetalhado(indiceAtual - 1, total, inicioLote, inicioGrafo, "criando diretórios", grafo.vertices, grafo.arestas);
+            atualizarLoadingTerminalDetalhado(indiceAtual - 1, total, inicioLote, inicioGrafo, "criando diretórios",
+                    grafo.vertices, grafo.arestas);
             Path pastaBase = Paths.get(nomePastaBase);
             Files.createDirectories(pastaBase);
 
@@ -124,12 +126,15 @@ class geradorgrafos{
             Path pastaDoGrafo = pastaBase.resolve("grafo" + proximoIndice);
             Files.createDirectories(pastaDoGrafo);
 
-            atualizarLoadingTerminalDetalhado(indiceAtual - 1, total, inicioLote, inicioGrafo, "contando arestas", grafo.vertices, grafo.arestas);
+            atualizarLoadingTerminalDetalhado(indiceAtual - 1, total, inicioLote, inicioGrafo, "contando arestas",
+                    grafo.vertices, grafo.arestas);
             ResumoArestas resumo = resumirArestasComprimidas(grafo);
 
-            atualizarLoadingTerminalDetalhado(indiceAtual - 1, total, inicioLote, inicioGrafo, "escrevendo grafo.txt", grafo.vertices, resumo.totalArestasComprimidas);
+            atualizarLoadingTerminalDetalhado(indiceAtual - 1, total, inicioLote, inicioGrafo, "escrevendo grafo.txt",
+                    grafo.vertices, resumo.totalArestasComprimidas);
             escreverArquivoTxt(pastaDoGrafo.resolve("grafo.txt"), grafo, resumo.totalArestasComprimidas);
-            atualizarLoadingTerminalDetalhado(indiceAtual - 1, total, inicioLote, inicioGrafo, "escrevendo grafo.fws", grafo.vertices, resumo.totalArestasComprimidas);
+            atualizarLoadingTerminalDetalhado(indiceAtual - 1, total, inicioLote, inicioGrafo, "escrevendo grafo.fws",
+                    grafo.vertices, resumo.totalArestasComprimidas);
             escreverArquivoFws(pastaDoGrafo.resolve("grafo.fws"), grafo, resumo);
         } catch (IOException e) {
             System.out.println("Erro ao registrar grafo: " + e.getMessage());
@@ -207,12 +212,10 @@ class geradorgrafos{
 
     static void escreverArquivoTxt(Path caminhoArquivo, Grafo grafo, int totalArestasComprimidas) throws IOException {
         try (BufferedWriter writer = new BufferedWriter(
-            new OutputStreamWriter(
-                new BufferedOutputStream(Files.newOutputStream(caminhoArquivo), IO_BUFFER_BYTES),
-                StandardCharsets.UTF_8
-            ),
-            IO_BUFFER_BYTES
-        )) {
+                new OutputStreamWriter(
+                        new BufferedOutputStream(Files.newOutputStream(caminhoArquivo), IO_BUFFER_BYTES),
+                        StandardCharsets.UTF_8),
+                IO_BUFFER_BYTES)) {
             writer.write(grafo.vertices + " " + totalArestasComprimidas);
             writer.newLine();
 
@@ -231,7 +234,8 @@ class geradorgrafos{
     }
 
     static void escreverArquivoFws(Path caminhoArquivo, Grafo grafo, ResumoArestas resumo) throws IOException {
-        try (DataOutputStream out = new DataOutputStream(new BufferedOutputStream(Files.newOutputStream(caminhoArquivo), IO_BUFFER_BYTES))) {
+        try (DataOutputStream out = new DataOutputStream(
+                new BufferedOutputStream(Files.newOutputStream(caminhoArquivo), IO_BUFFER_BYTES))) {
             out.writeBytes("fws");
             escreverVarInt(out, grafo.vertices);
             escreverVarInt(out, resumo.totalArestasComprimidas);
@@ -283,7 +287,8 @@ class geradorgrafos{
         System.out.flush();
     }
 
-    static void atualizarLoadingTerminalDetalhado(int concluido, int total, long inicioLote, long inicioGrafo, String fase, int vertices, int arestas) {
+    static void atualizarLoadingTerminalDetalhado(int concluido, int total, long inicioLote, long inicioGrafo,
+            String fase, int vertices, int arestas) {
         if (total <= 0) {
             return;
         }
@@ -307,35 +312,34 @@ class geradorgrafos{
         barra.append(']');
 
         String linha = String.format(
-            "\rGerando %s %3d%% (%d/%d) | fase: %s | V:%d A:%d | item:%d ms | lote:%d ms | ETA:%d ms",
-            barra,
-            percentual,
-            concluido,
-            total,
-            fase,
-            vertices,
-            arestas,
-            tempoGrafoMs,
-            decorridoMs,
-            etaMs
-        );
+                "\rGerando %s %3d%% (%d/%d) | fase: %s | V:%d A:%d | item:%d ms | lote:%d ms | ETA:%d ms",
+                barra,
+                percentual,
+                concluido,
+                total,
+                fase,
+                vertices,
+                arestas,
+                tempoGrafoMs,
+                decorridoMs,
+                etaMs);
         System.out.print(linha);
         System.out.flush();
     }
 
-   static int menu1(Scanner scanner) {
+    static int menu1(Scanner scanner) {
         limparTela();
         System.out.println("Menu:");
         System.out.println("1. Gerar grafo Euriliano");
         System.out.println("2. Gerar grafo Semi-Euriliano");
         System.out.println("3. Gerar grafo não Euriliano");
-       System.out.println("4. Gerar TODOS (3 tipos x 4 tamanhos)");
+        System.out.println("4. Gerar TODOS (3 tipos x 4 tamanhos)");
         System.out.println("0. Sair");
-       return lerInteiroNoIntervalo(scanner, 0, 4);
+        return lerInteiroNoIntervalo(scanner, 0, 4);
     }
 
     static int menu2(Scanner scanner) {
-        //100, 1.000, 10.000 e 100.000 vértices.
+        // 100, 1.000, 10.000 e 100.000 vértices.
         limparTela();
         System.out.println("Menu:");
         System.out.println("1. Gerar grafo com 100 vértices");
@@ -393,19 +397,18 @@ class ResumoArestas {
     }
 }
 
-
-class Grafo{
+class Grafo {
     int vertices;
     int arestas;
     fowardstar fowardstar;
 
-    Grafo(int vertices, int arestas){
+    Grafo(int vertices, int arestas) {
         this.vertices = vertices;
         this.arestas = arestas;
-        this.fowardstar = new fowardstar( vertices);
+        this.fowardstar = new fowardstar(vertices);
     }
 
-   Grafo gerarGrafoEuriliano(int vertices, int arestas){
+    Grafo gerarGrafoEuriliano(int vertices, int arestas) {
         SecureRandom secureRandom = new SecureRandom();
         Grafo grafo = new Grafo(vertices, arestas);
 
@@ -540,7 +543,7 @@ class Grafo{
         return -1;
     }
 
-    Grafo gerarGrafoSemiEuriliano(int vertices, int arestas){
+    Grafo gerarGrafoSemiEuriliano(int vertices, int arestas) {
         SecureRandom secureRandom = new SecureRandom();
         Grafo grafo = new Grafo(vertices, arestas);
 
@@ -645,7 +648,7 @@ class Grafo{
         return arestasInseridas;
     }
 
-    Grafo gerarGrafoNaoEuriliano(int vertices, int arestas){
+    Grafo gerarGrafoNaoEuriliano(int vertices, int arestas) {
         SecureRandom secureRandom = new SecureRandom();
         Grafo grafo = new Grafo(vertices, arestas);
 
@@ -695,7 +698,8 @@ class Grafo{
             return 2;
         }
 
-        // Em grafos muito grandes, reduz grau-alvo para diminuir custo total de geração e I/O.
+        // Em grafos muito grandes, reduz grau-alvo para diminuir custo total de geração
+        // e I/O.
         if (vertices >= 100000) {
             return Math.min(limite, 8);
         }
@@ -705,10 +709,9 @@ class Grafo{
         return Math.min(limite, 20);
     }
 
-
 }
 
-class fowardstar{
+class fowardstar {
     listaduplamenteencadeada ponteiro;
     listaduplamenteencadeada destino;
     No[] indicePonteiroPorVertice;
@@ -716,7 +719,7 @@ class fowardstar{
     No[] fimDestinoPorOrigem;
     int[] grauPorOrigem;
 
-    fowardstar(int vertices){
+    fowardstar(int vertices) {
         this.indicePonteiroPorVertice = new No[Math.max(0, vertices + 1)];
         this.inicioDestinoPorOrigem = new No[Math.max(0, vertices + 1)];
         this.fimDestinoPorOrigem = new No[Math.max(0, vertices + 1)];
@@ -725,8 +728,10 @@ class fowardstar{
         this.destino = new listaduplamenteencadeada();
     }
 
-    fowardstar likarponteiroscomdestino(fowardstar fowardstar){
-        //aqui apos rodar inserção quero garantir que em ponteiros o no.referencia seja a o primeiro no com o valor do no.referencia.valor igual ao valor do no.valor do ponteiro
+    fowardstar likarponteiroscomdestino(fowardstar fowardstar) {
+        // aqui apos rodar inserção quero garantir que em ponteiros o no.referencia seja
+        // a o primeiro no com o valor do no.referencia.valor igual ao valor do no.valor
+        // do ponteiro
         No atualPonteiro = fowardstar.ponteiro.inicio;
         while (atualPonteiro != null) {
             No atualDestino = fowardstar.destino.inicio;
@@ -736,7 +741,6 @@ class fowardstar{
                     break; // Encontrou o destino correspondente, pode sair do loop
                 }
 
-                
                 atualDestino = atualDestino.proximo;
             }
             atualPonteiro = atualPonteiro.proximo;
@@ -746,16 +750,14 @@ class fowardstar{
 
     }
 
-
-
-    int verificargraudovertice(int vertice){
+    int verificargraudovertice(int vertice) {
         if (vertice < 1 || vertice >= grauPorOrigem.length) {
             return -1;
         }
         return grauPorOrigem[vertice];
     }
 
-    fowardstar inserirAresta(fowardstar fowardstar, int origem, int destino){
+    fowardstar inserirAresta(fowardstar fowardstar, int origem, int destino) {
         No referencia = obterNoPonteiro(origem);
         if (referencia == null) {
             return fowardstar;
@@ -764,10 +766,10 @@ class fowardstar{
         No novoNo = new No(destino, null, null, referencia);
 
         // Inserção O(1) no fim da lista de destinos.
-        if(fowardstar.destino.inicio == null){
+        if (fowardstar.destino.inicio == null) {
             fowardstar.destino.inicio = novoNo;
             fowardstar.destino.fim = novoNo;
-        }else{
+        } else {
             fowardstar.destino.fim.proximo = novoNo;
             novoNo.anterior = fowardstar.destino.fim;
             fowardstar.destino.fim = novoNo;
@@ -808,9 +810,8 @@ class fowardstar{
         }
         return referencia;
     }
-    
 
-    listaduplamenteencadeada montarponteiro(int vertices){
+    listaduplamenteencadeada montarponteiro(int vertices) {
         listaduplamenteencadeada ponteiros = new listaduplamenteencadeada();
 
         if (vertices <= 0) {
@@ -833,41 +834,37 @@ class fowardstar{
     }
 }
 
-//lista usada para foawardstar 
-class listaduplamenteencadeada{
-   
-        No inicio;
-            No fim;
-    
-            public listaduplamenteencadeada() {
-                this.inicio = null;
-                this.fim = null;
-            }
-    
-           
-       
+// lista usada para foawardstar
+class listaduplamenteencadeada {
 
-  
+    No inicio;
+    No fim;
+
+    public listaduplamenteencadeada() {
+        this.inicio = null;
+        this.fim = null;
+    }
+
 }
-  
 
 class No {
-        int valor;
-        No proximo;
-        No proximoOrigem;
-        No anterior;
-        No referencia;
+    int valor;
+    No proximo;
+    No proximoOrigem;
+    No anterior;
+    No referencia;
 
-        public No(int valor,No anterior, No proximo, No referencia) {
-            this.valor = valor;
-            this.proximo = proximo;
-            this.proximoOrigem = null;
-            this.anterior = anterior;
-            this.referencia = referencia;
-        }
-        //metodo clone 
-        public No clone() {
-            return new No(this.valor, this.anterior, this.proximo, this.referencia);
-        }
-
+    public No(int valor, No anterior, No proximo, No referencia) {
+        this.valor = valor;
+        this.proximo = proximo;
+        this.proximoOrigem = null;
+        this.anterior = anterior;
+        this.referencia = referencia;
     }
+
+    // metodo clone
+    public No clone() {
+        return new No(this.valor, this.anterior, this.proximo, this.referencia);
+    }
+
+}
