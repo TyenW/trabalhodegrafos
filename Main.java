@@ -3,9 +3,11 @@ import java.util.ArrayList;
 import java.lang.reflect.Field;
 import java.util.*;
 /*
-    Implementação do algoritmo de busca em profundidade (DFS) para grafos direcionados.
-    O algoritmo foi adaptado dos slides da aula 07-Busca em profundidade.
-    A classe Vertice e Grafos foram retirados da implementação anterior.
+    A maioria dos algoritmos utilizados foram reaproveitados das implementações anteriores pelo aluno Filipe Nery
+    O algoritmo de Tarjan foi implementado utilizando como base o artigo do Tarjan, e também algumas modificações
+    O algoritmo ingênuo foi implementado com base na definição clássica de ponte em grafos
+    O algoritmo de Fleury foi inspirado no algoritmo ensinado em https://www.geeksforgeeks.org/dsa/fleurys-algorithm-for-printing-eulerian-path/
+
 */
 
 class Vertice{
@@ -14,17 +16,20 @@ class Vertice{
     public ArrayList<Integer> sucessao;
     public ArrayList<Integer> predecessao;
     public boolean visitado;
+    public int grau;
 
     Vertice(int num){
         this.vertice = num;
         this.sucessao = new ArrayList<>();
         this.predecessao = new ArrayList<>();
+        this.grau = 0;
         this.visitado = false;
     }
 
     public void inserirS(int num){
         //Função que insere o vertice na lista de sucessores
         this.sucessao.add(num);
+        this.grau++;
     }
 
     public void inserirP(int num){
@@ -84,6 +89,11 @@ class Vertice{
     public void remover(int valor) {
         sucessao.remove(Integer.valueOf(valor));
         predecessao.remove(Integer.valueOf(valor));
+    }
+
+    public void inserir(int valor) {
+        sucessao.add(valor);
+        predecessao.add(valor);
     }
 }
 
@@ -180,6 +190,12 @@ class Grafos {
         return arq;
     }
 
+    public static void removerAresta(int u, int v){
+        // Grafo não direcionado: remove nos dois sentidos
+        grafo[u].remover(v);
+        grafo[v].remover(u);
+    }
+
     public static void init(){
         try {
             File arq = solicitarArquivo();
@@ -201,6 +217,16 @@ class Grafos {
             e.printStackTrace();
         }
     }
+
+    void dfsVerificaAlcanceDeVertice(int v, boolean[] visitado) {
+        visitado[v] = true;
+
+        for (int vizinho : Grafos.grafo[v].getSucessores()) {
+            if (!visitado[vizinho]) {
+                dfsVerificaAlcanceDeVertice(vizinho, visitado);
+            }
+        }
+    }
 }
 
 class Arestas{
@@ -219,7 +245,7 @@ class Arestas{
     }
 }
 
-public class DFS {
+class DFS {
     static int t;
     static ArrayList<Arestas> arestas;
     static int td[];
@@ -357,6 +383,195 @@ public class DFS {
             imprimir();
         } catch (FileNotFoundException e) {
             System.out.println("Erro: Arquivo nao encontrado - " + e.getMessage());
+        }
+    }
+}
+
+class naive {
+    // Classe auxiliar do algoritmo ingênuo
+    public static ArrayList<String> pontes = new ArrayList<>();
+
+    public static void cortar(int u, int v){
+        Grafos.removerAresta(u, v);
+    }
+    
+
+    public static void restaurar(int u, int v){
+        //Função que restaura a aresta entre os vértices u e v  
+        Grafos.grafo[u].inserirOrdenado(v);
+        Grafos.grafo[v].inserirOrdenado(u);
+    }
+
+    public static void naive(){
+        pontes.clear();
+        DFS.dfs();
+        int componentesOriginal = Grafos.componentes;
+ 
+        for(int i = 1; i <= Grafos.vertice; i++){
+            // Copia a lista para não iterar sobre a lista que será modificada
+            ArrayList<Integer> vizinhos = new ArrayList<>(Grafos.grafo[i].getSucessores());
+            
+            for(int j : vizinhos){
+                // Evita checar a mesma aresta duas vezes (i-j e j-i)
+                if(j <= i) continue;
+ 
+                cortar(i, j);
+                DFS.dfs();
+ 
+                if(Grafos.componentes > componentesOriginal){
+                    pontes.add(i + " - " + j);
+                }
+ 
+                restaurar(i, j);
+            }      
+        }
+    }
+
+    public void imprimirPontes() {
+        if (pontes.isEmpty()) {
+            System.out.println("Nenhuma ponte encontrada.");
+        } else {
+            for (String ponte : pontes) {
+                System.out.println("Aresta " + ponte + " é uma ponte!");
+            } naive.naive();
+            System.out.println("Total: " + pontes.size() + " ponte(s)");
+        }
+    }
+
+}
+
+class Tarjan {
+    // Classe auxiliar do algoritmo de Tarjan
+    public static ArrayList<String> pontes = new ArrayList<>();
+ 
+    public static void tarjan() {
+        pontes.clear();
+        // Inicializar arrays zerados
+        DFS.td = new int[Grafos.vertice + 1];
+        DFS.low = new int[Grafos.vertice + 1];
+        DFS.pai = new int[Grafos.vertice + 1];
+        DFS.t = 0;
+        DFS.arestas = new ArrayList<>();
+
+        // Executar a busca em profundidade de Tarjan
+        for (int i = 1; i <= Grafos.vertice; i++) {
+            if (DFS.td[i] == 0) {
+                DFS.buscaProfundidadeTarjan(Grafos.grafo[i], -1);
+            }
+        }
+
+        // Verifica as pontes usando os resultados da DFS de Tarjan
+        for (int i = 1; i <= Grafos.vertice; i++) {
+            int p = DFS.pai[i];
+            if (p != 0) { // Se o vértice 'i' tem um pai na árvore
+                // A condição clássica: low[filho] > discovery[pai]
+                if (DFS.low[i] > DFS.td[p]) {
+                    pontes.add(p + " - " + i);
+                }
+            }
+        }
+    }
+
+    public void imprimirPontes() {
+        if (pontes.isEmpty()) {
+            System.out.println("Nenhuma ponte encontrada.");
+        } else {
+            for (String ponte : pontes) {
+                System.out.println("Aresta " + ponte + " é uma ponte!");
+            }
+            System.out.println("Total: " + pontes.size() + " ponte(s)");
+        }
+    }
+}
+
+class CaminhoEuleriano {
+    public static List<int[]> arestas;
+    
+    static void contaVizinhos(int u, boolean[] visitado) {
+        visitado[u] = true;
+        for (int vizinho : Grafos.grafo[u].getSucessores()) {
+            if (!visitado[vizinho]) {
+                contaVizinhos(vizinho, visitado);
+            }
+        }
+    }
+    
+    static boolean proximaArestaEValida(int u, int v) {
+
+        if (Grafos.grafo[u].sucessao.size() == 1) {
+            return true;
+        }
+
+        boolean[] visitado = new boolean[Grafos.vertice + 1];
+        int contador1 = 0;
+        contaVizinhos(u, visitado);
+        for (boolean x : visitado) {
+            if (x) {
+                contador1++;
+            }
+        }
+
+        Grafos.removerAresta(u, v);
+
+        Arrays.fill(visitado, false);
+        int contador2 = 0;
+        contaVizinhos(u, visitado);
+        for (boolean x : visitado) {
+            if (x) {
+                contador2++;
+            }
+        }
+
+        Grafos.grafo[u].inserir(v);
+        Grafos.grafo[v].inserir(u);
+
+        return contador1 == contador2;
+    }
+
+    static void pegarCaminho(int u, int v) {
+
+        for (int i = 0; i < Grafos.grafo[u].sucessao.size(); ++i) {
+            int proximo = Grafos.grafo[u].sucessao.get(i);
+            if (proximaArestaEValida(u, proximo)) {
+                arestas.add(new int[]{u, proximo});
+                Grafos.removerAresta(u, proximo);
+                pegarCaminho(proximo, v);
+                break;
+            }
+        }
+    }
+
+    static List<int[]> pegarCaminhoEuleriano(int v) {
+        int start = 0;
+
+        // Procura um vertice de grau ímpar para começar, se existir
+        boolean temGrauImpar = false;
+        int i = 1;
+        while (i < v && !temGrauImpar) {
+            if (Grafos.grafo[i].grau % 2 != 0) {
+                start = i;
+                temGrauImpar = true;
+
+            }
+            i++;
+        }
+
+        arestas = new ArrayList<>();
+        pegarCaminho(start, v);
+        return arestas;
+    }
+    
+}
+
+public class Main {
+    public static void main(String[] args) throws FileNotFoundException {
+        Grafos.lerGrafo(new File("graph.txt"));
+        List <int[]> caminhoEuleriano = CaminhoEuleriano.pegarCaminhoEuleriano(Grafos.vertice);
+        for(int i = 0; i < caminhoEuleriano.size(); i++){
+            System.out.print(caminhoEuleriano.get(i)[0] + "-" + caminhoEuleriano.get(i)[1]);
+            if (i != caminhoEuleriano.size() - 1) {
+                System.out.print(", ");
+            }
         }
     }
 }
