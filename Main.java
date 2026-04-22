@@ -13,87 +13,56 @@ import java.util.*;
 class Vertice{
     // 
     public int vertice;
-    public ArrayList<Integer> sucessao;
-    public ArrayList<Integer> predecessao;
+    public ArrayList<Integer> vizinhos;
     public boolean visitado;
     public int grau;
 
     Vertice(int num){
         this.vertice = num;
-        this.sucessao = new ArrayList<>();
-        this.predecessao = new ArrayList<>();
+        this.vizinhos = new ArrayList<>();
         this.grau = 0;
         this.visitado = false;
     }
 
-    public void inserirS(int num){
-        //Função que insere o vertice na lista de sucessores
-        this.sucessao.add(num);
+    public void inserir(int num){
+        //Função que insere o vertice na lista de vizinhos
+        this.vizinhos.add(num);
         this.grau++;
     }
 
-    public void inserirP(int num){
-        //Função que insere o vertice na lista de predecessores
-        this.predecessao.add(num);
+    public int contarVizinhos(){
+        return this.vizinhos.size();
     }
 
-    public int contarS(){
-        return this.sucessao.size();
-    }
-
-    public int contarP(){
-        return this.predecessao.size();
-    }
-
-    public ArrayList<Integer> getSucessores(){
-        return this.sucessao;
-    }
-
-    public ArrayList<Integer> getPredecessores(){
-        return this.predecessao;
+    public ArrayList<Integer> getVizinhos(){
+        return this.vizinhos;
     }
 
     public void imprimir(){
         System.out.println("\nVeritice visualizado: " + vertice);
-        System.out.println("(i)Grau de saída: " + contarS());
-        System.out.println("(ii)Grau de entrada: " + contarP());
-        System.out.print("(iii) Conjunto de sucessores: ");
-        for(int i : sucessao) {
-            System.out.printf("%d, ", i);
-        }
-        System.out.print("\n(iv)Conjunto de predecessores: ");
-        for(int i : predecessao) {
-            System.out.printf("%d, ", i);
+        System.out.println("(i)Grau de saída: " + contarVizinhos());
+        System.out.print("(iii) Conjunto de vizinhos: ");
+        for(int i: vizinhos){
+            System.out.print(i + " ");
         }
         System.out.println("");
     }
 
     public void ordenar(){
-        Collections.sort(sucessao);
-        Collections.sort(predecessao);
+        Collections.sort(vizinhos);
     }
 
     public void inserirOrdenado(int valor) {
         // Encontra a posição correta para manter a lista ordenada
         int pos = 0;
-        while (pos < predecessao.size() && predecessao.get(pos) < valor) {
+        while (pos < vizinhos.size() && vizinhos.get(pos) < valor) {
             pos++;
         }
-        predecessao.add(pos, valor);
-        while (pos < sucessao.size() && sucessao.get(pos) < valor) {
-            pos++;
-        }
-        sucessao.add(pos, valor);
+        vizinhos.add(pos, valor);
     }
 
     public void remover(int valor) {
-        sucessao.remove(Integer.valueOf(valor));
-        predecessao.remove(Integer.valueOf(valor));
-    }
-
-    public void inserir(int valor) {
-        sucessao.add(valor);
-        predecessao.add(valor);
+        vizinhos.remove(Integer.valueOf(valor));
     }
 }
 
@@ -117,10 +86,8 @@ class Grafos {
             for(int i = 0; i < arestas; i++){
                 int pai = leitor.nextInt();
                 int filho = leitor.nextInt();
-                grafo[pai].inserirS(filho);
-                grafo[pai].inserirP(filho);
-                grafo[filho].inserirS(pai);
-                grafo[filho].inserirP(pai);
+                grafo[pai].inserir(filho);
+                grafo[filho].inserir(pai);
             }
             for(int i = 1; i <= vertice; i++){
                 grafo[i].ordenar();
@@ -133,11 +100,8 @@ class Grafos {
         Vertice[] novoGrafo = new Vertice[vertice + 1];
         for(int i = 1; i <= vertice; i++){
             novoGrafo[i] = new Vertice(i);
-            for(int s : grafo[i].getSucessores()) {
-                novoGrafo[i].inserirS(s);
-            }
-            for(int p : grafo[i].getPredecessores()) {
-                novoGrafo[i].inserirP(p);
+            for(int v : grafo[i].getVizinhos()) {
+                novoGrafo[i].inserir(v);
             }
         }
         return novoGrafo;
@@ -221,7 +185,7 @@ class Grafos {
     void dfsVerificaAlcanceDeVertice(int v, boolean[] visitado) {
         visitado[v] = true;
 
-        for (int vizinho : Grafos.grafo[v].getSucessores()) {
+        for (int vizinho : Grafos.grafo[v].getVizinhos()) {
             if (!visitado[vizinho]) {
                 dfsVerificaAlcanceDeVertice(vizinho, visitado);
             }
@@ -253,8 +217,8 @@ class DFS {
     static int pai[];
     static int low[];
 
-    private static ArrayList<Integer> sucessoresDe(Vertice v){
-        return v.getSucessores();
+    private static ArrayList<Integer> vizinhosDe(Vertice v){
+        return v.getVizinhos();
     }
 
     public static void imprimir(){
@@ -266,7 +230,7 @@ class DFS {
     public static void buscaProfundidade(Vertice v){
         t = t+1;
         td[v.vertice] = t;
-        for(int ws: sucessoresDe(v))
+        for(int ws: vizinhosDe(v))
         {
             Vertice w = Grafos.grafo[ws];
             if(w != null){
@@ -298,7 +262,7 @@ class DFS {
         // Controla arestas paralelas de volta ao pai
         int vezesVoltouAoPai = 0;
  
-        for (int ws : v.getSucessores()) {
+        for (int ws : v.getVizinhos()) {
             Vertice w = Grafos.grafo[ws];
             if (td[w.vertice] == 0) {
                 // Vizinho não visitado: aresta de árvore
@@ -409,7 +373,7 @@ class naive {
  
         for(int i = 1; i <= Grafos.vertice; i++){
             // Copia a lista para não iterar sobre a lista que será modificada
-            ArrayList<Integer> vizinhos = new ArrayList<>(Grafos.grafo[i].getSucessores());
+            ArrayList<Integer> vizinhos = new ArrayList<>(Grafos.grafo[i].getVizinhos());
             
             for(int j : vizinhos){
                 // Evita checar a mesma aresta duas vezes (i-j e j-i)
@@ -436,6 +400,19 @@ class naive {
             } naive.naive();
             System.out.println("Total: " + pontes.size() + " ponte(s)");
         }
+    }
+
+    // Verifica se uma aresta específica é ponte usando o algoritmo naive
+    public static boolean isPonte(int u, int v) {
+        DFS.dfs();
+        int componentesOriginal = Grafos.componentes;
+        
+        cortar(u, v);
+        DFS.dfs();
+        boolean ehPonte = Grafos.componentes > componentesOriginal;
+        restaurar(u, v);
+        
+        return ehPonte;
     }
 
 }
@@ -482,56 +459,81 @@ class Tarjan {
             System.out.println("Total: " + pontes.size() + " ponte(s)");
         }
     }
+
+    // Verifica se uma aresta específica é ponte usando o algoritmo de Tarjan
+    public static boolean isPonte(int u, int v) {
+        // Faz uma cópia do grafo para não interferir com a execução
+        Vertice[] grafoOriginal = Grafos.grafo;
+        Grafos.grafo = Grafos.clonarGrafo();
+        
+        // Executa Tarjan
+        tarjan();
+        
+        // Verifica se a aresta (u,v) está nas pontes encontradas
+        boolean ehPonte = false;
+        for (String ponte : pontes) {
+            String[] partes = ponte.split(" - ");
+            int a = Integer.parseInt(partes[0]);
+            int b = Integer.parseInt(partes[1]);
+            if ((a == u && b == v) || (a == v && b == u)) {
+                ehPonte = true;
+                break;
+            }
+        }
+        
+        // Restaura o grafo original
+        Grafos.grafo = grafoOriginal;
+        return ehPonte;
+    }
 }
 
 class CaminhoEuleriano {
     public static List<int[]> arestas;
+    public static String algoritmoUsado = "naive"; // naive ou tarjan
+    
+    // Define qual algoritmo será usado para detectar pontes
+    public static void setAlgoritmo(String algoritmo) {
+        if (algoritmo.equalsIgnoreCase("naive") || algoritmo.equalsIgnoreCase("tarjan")) {
+            algoritmoUsado = algoritmo.toLowerCase();
+            System.out.println("Algoritmo de detecção de pontes: " + algoritmoUsado);
+        } else {
+            System.out.println("Algoritmo inválido! Use 'naive' ou 'tarjan'");
+        }
+    }
     
     static void contaVizinhos(int u, boolean[] visitado) {
         visitado[u] = true;
-        for (int vizinho : Grafos.grafo[u].getSucessores()) {
+        for (int vizinho : Grafos.grafo[u].getVizinhos()) {
             if (!visitado[vizinho]) {
                 contaVizinhos(vizinho, visitado);
             }
         }
     }
-    
+
+    // Verifica se a próxima aresta é válida (não é uma ponte)
+    // usa o algoritmo definido em algoritmoUsado
     static boolean proximaArestaEValida(int u, int v) {
 
-        if (Grafos.grafo[u].sucessao.size() == 1) {
+        if (Grafos.grafo[u].vizinhos.size() == 1) {
             return true;
         }
 
-        boolean[] visitado = new boolean[Grafos.vertice + 1];
-        int contador1 = 0;
-        contaVizinhos(u, visitado);
-        for (boolean x : visitado) {
-            if (x) {
-                contador1++;
-            }
+        boolean ehPonte;
+        
+        if (algoritmoUsado.equalsIgnoreCase("tarjan")) {
+            ehPonte = Tarjan.isPonte(u, v);
+        } else {
+            ehPonte = naive.isPonte(u, v);
         }
-
-        Grafos.removerAresta(u, v);
-
-        Arrays.fill(visitado, false);
-        int contador2 = 0;
-        contaVizinhos(u, visitado);
-        for (boolean x : visitado) {
-            if (x) {
-                contador2++;
-            }
-        }
-
-        Grafos.grafo[u].inserir(v);
-        Grafos.grafo[v].inserir(u);
-
-        return contador1 == contador2;
+        
+        // Se for ponte, não é válida. Se não for, é válida.
+        return !ehPonte;
     }
 
     static void pegarCaminho(int u, int v) {
 
-        for (int i = 0; i < Grafos.grafo[u].sucessao.size(); ++i) {
-            int proximo = Grafos.grafo[u].sucessao.get(i);
+        for (int i = 0; i < Grafos.grafo[u].vizinhos.size(); ++i) {
+            int proximo = Grafos.grafo[u].vizinhos.get(i);
             if (proximaArestaEValida(u, proximo)) {
                 arestas.add(new int[]{u, proximo});
                 Grafos.removerAresta(u, proximo);
@@ -542,14 +544,14 @@ class CaminhoEuleriano {
     }
 
     static List<int[]> pegarCaminhoEuleriano(int v) {
-        int start = 0;
+        int inicio = 1;
 
         // Procura um vertice de grau ímpar para começar, se existir
         boolean temGrauImpar = false;
         int i = 1;
-        while (i < v && !temGrauImpar) {
+        while (i <= v && !temGrauImpar) {
             if (Grafos.grafo[i].grau % 2 != 0) {
-                start = i;
+                inicio = i;
                 temGrauImpar = true;
 
             }
@@ -557,15 +559,37 @@ class CaminhoEuleriano {
         }
 
         arestas = new ArrayList<>();
-        pegarCaminho(start, v);
+        pegarCaminho(inicio, v);
         return arestas;
     }
     
 }
 
 public class Main {
+
+    public static int menu() {
+        System.out.println("Escolha o algoritmo para detecção de pontes:");
+        System.out.println("1. Ingênuo");
+        System.out.println("2. Tarjan");
+        System.out.print("Opção: ");
+        Scanner scanner = new Scanner(System.in);
+        return scanner.nextInt();
+    }
+
     public static void main(String[] args) throws FileNotFoundException {
+        // Inicia cronômetro
+        long tempoInicio = System.nanoTime();
+        
         Grafos.lerGrafo(new File("grafos100euleriano/grafo1/grafo.txt"));
+        
+        // Define qual algoritmo usar: "naive" ou "tarjan"
+        int opcao = menu();
+        if (opcao == 1) {
+            CaminhoEuleriano.setAlgoritmo("naive");
+        } else {
+            CaminhoEuleriano.setAlgoritmo("tarjan");
+        }
+
         List <int[]> caminhoEuleriano = CaminhoEuleriano.pegarCaminhoEuleriano(Grafos.vertice);
         for(int i = 0; i < caminhoEuleriano.size(); i++){
             System.out.print(caminhoEuleriano.get(i)[0] + "-" + caminhoEuleriano.get(i)[1]);
@@ -573,6 +597,13 @@ public class Main {
                 System.out.print(", ");
             }
         }
+        
+        // Calcula tempo de execução
+        long tempoFim = System.nanoTime();
+        long tempoExecucao = tempoFim - tempoInicio;
+        
+        System.out.println("\n\n=== ESTATÍSTICAS ===");
+        System.out.println("Tempo de execução: " + (tempoExecucao / 1_000_000.0) + " ms");
     }
 }
 
