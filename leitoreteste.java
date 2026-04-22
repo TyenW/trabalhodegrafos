@@ -4,7 +4,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -68,7 +70,7 @@ public class leitoreteste {
 					ResultadoLeitura resultado = lerEClassificarGrafo(arquivoTxt);
 
 					boolean verticesOk = (resultado.vertices == verticesEsperados);
-					boolean tipoOk = resultado.classificacao.equals(tipoEsperado);
+					boolean tipoOk = resultado.classificacao.equals(tipoEsperado) && resultado.estruturaValida;
 
 					if (verticesOk && tipoOk) {
 						totalOk++;
@@ -82,6 +84,7 @@ public class leitoreteste {
 							+ " | V detectado=" + resultado.vertices
 							+ " (esperado=" + verticesEsperados + ")"
 							+ " | M=" + resultado.arestas
+							+ " | validação=" + resultado.resumoValidacao
 						);
 					}
 				} catch (Exception e) {
@@ -151,7 +154,6 @@ public class leitoreteste {
 				throw new IOException("número de vértices inválido: " + n);
 			}
 
-			UnionFind uf = new UnionFind(n + 1);
 			int[] grau = new int[n + 1];
 			IntBag[] adj = new IntBag[n + 1];
 			for (int i = 1; i <= n; i++) {
@@ -162,6 +164,8 @@ public class leitoreteste {
 			int[] edgeU = new int[capacidadeInicial];
 			int[] edgeV = new int[capacidadeInicial];
 			boolean[] edgeLoop = new boolean[capacidadeInicial];
+			Set<Long> arestasCanonicas = new HashSet<Long>(capacidadeInicial * 2);
+			boolean temArestaParalela = false;
 
 			int mLido = 0;
 			String linha;
@@ -187,6 +191,11 @@ public class leitoreteste {
 					throw new IOException("aresta fora do intervalo de vértices: '" + linha + "'");
 				}
 
+				long chaveCanonica = chaveArestaCanonica(u, v);
+				if (!arestasCanonicas.add(chaveCanonica)) {
+					temArestaParalela = true;
+				}
+
 				if (mLido == edgeU.length) {
 					int novaCapacidade = edgeU.length * 2;
 					edgeU = java.util.Arrays.copyOf(edgeU, novaCapacidade);
@@ -206,25 +215,11 @@ public class leitoreteste {
 				} else {
 					grau[u]++;
 					grau[v]++;
-					uf.union(u, v);
 				}
 				mLido++;
 			}
 
-			boolean conexoEntreVerticesComAresta = true;
-			int representante = -1;
-			for (int v = 1; v <= n; v++) {
-				if (grau[v] == 0) {
-					continue;
-				}
-				int raiz = uf.find(v);
-				if (representante == -1) {
-					representante = raiz;
-				} else if (representante != raiz) {
-					conexoEntreVerticesComAresta = false;
-					break;
-				}
-			}
+			boolean conexoPorDfs = ehConexoPorDfsTodosVertices(n, adj, edgeU, edgeV, edgeLoop, mLido);
 
 			int impares = 0;
 			for (int v = 1; v <= n; v++) {
@@ -234,12 +229,12 @@ public class leitoreteste {
 			}
 
 			int pontes = 0;
-			if (conexoEntreVerticesComAresta && impares == 0) {
+			if (conexoPorDfs && impares == 0) {
 				pontes = contarPontes(n, grau, adj, edgeU, edgeV, edgeLoop, mLido);
 			}
 
 			String classificacao;
-			if (!conexoEntreVerticesComAresta) {
+			if (!conexoPorDfs || temArestaParalela) {
 				classificacao = "naoeuleriano";
 			} else if (impares == 0 && pontes == 0) {
 				classificacao = "euleriano";
@@ -254,8 +249,66 @@ public class leitoreteste {
 				mCabecalho = mLido;
 			}
 
-			return new ResultadoLeitura(n, mLido, classificacao);
+			boolean temLaco = false;
+			for (int i = 0; i < mLido; i++) {
+				if (edgeLoop[i]) {
+					temLaco = true;
+					break;
+				}
+			}
+
+			StringBuilder resumo = new StringBuilder();
+			resumo.append(conexoPorDfs ? "conexo=sim" : "conexo=nao");
+			resumo.append(temArestaParalela ? ", paralela=sim" : ", paralela=nao");
+			resumo.append(temLaco ? ", laco=sim" : ", laco=nao");
+			boolean estruturaValida = conexoPorDfs && !temArestaParalela && !temLaco;
+
+			return new ResultadoLeitura(n, mLido, classificacao, estruturaValida, resumo.toString());
 		}
+	}
+
+	private static long chaveArestaCanonica(int u, int v) {
+		int a = Math.min(u, v);
+		int b = Math.max(u, v);
+		return (((long) a) << 32) | (b & 0xffffffffL);
+	}
+
+	private static boolean ehConexoPorDfsTodosVertices(int n, IntBag[] adj, int[] edgeU, int[] edgeV, boolean[] edgeLoop, int totalArestas) {
+		if (n <= 1) {
+			return true;
+		}
+
+		boolean[] visitado = new boolean[n + 1];
+		int[] pilha = new int[n];
+		int topo = 0;
+		pilha[topo++] = 1;
+		visitado[1] = true;
+
+		while (topo > 0) {
+			int atual = pilha[--topo];
+			IntBag incidencias = adj[atual];
+			for (int i = 0; i < incidencias.size(); i++) {
+				int edgeId = incidencias.get(i);
+				if (edgeId < 0 || edgeId >= totalArestas || edgeLoop[edgeId]) {
+					continue;
+				}
+
+				int u = edgeU[edgeId];
+				int v = edgeV[edgeId];
+				int vizinho = (u == atual) ? v : u;
+				if (!visitado[vizinho]) {
+					visitado[vizinho] = true;
+					pilha[topo++] = vizinho;
+				}
+			}
+		}
+
+		for (int vertice = 1; vertice <= n; vertice++) {
+			if (!visitado[vertice]) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	private static int contarPontes(int n, int[] grau, IntBag[] adj, int[] edgeU, int[] edgeV, boolean[] edgeLoop, int totalArestas) {
@@ -326,48 +379,15 @@ public class leitoreteste {
 		int vertices;
 		int arestas;
 		String classificacao;
+		boolean estruturaValida;
+		String resumoValidacao;
 
-		ResultadoLeitura(int vertices, int arestas, String classificacao) {
+		ResultadoLeitura(int vertices, int arestas, String classificacao, boolean estruturaValida, String resumoValidacao) {
 			this.vertices = vertices;
 			this.arestas = arestas;
 			this.classificacao = classificacao;
-		}
-	}
-
-	private static class UnionFind {
-		int[] parent;
-		byte[] rank;
-
-		UnionFind(int tamanho) {
-			this.parent = new int[tamanho];
-			this.rank = new byte[tamanho];
-			for (int i = 0; i < tamanho; i++) {
-				parent[i] = i;
-			}
-		}
-
-		int find(int x) {
-			if (parent[x] != x) {
-				parent[x] = find(parent[x]);
-			}
-			return parent[x];
-		}
-
-		void union(int a, int b) {
-			int ra = find(a);
-			int rb = find(b);
-			if (ra == rb) {
-				return;
-			}
-
-			if (rank[ra] < rank[rb]) {
-				parent[ra] = rb;
-			} else if (rank[ra] > rank[rb]) {
-				parent[rb] = ra;
-			} else {
-				parent[rb] = ra;
-				rank[ra]++;
-			}
+			this.estruturaValida = estruturaValida;
+			this.resumoValidacao = resumoValidacao;
 		}
 	}
 

@@ -416,87 +416,46 @@ class Grafo {
             return grafo;
         }
 
-        int[] deficit = new int[vertices + 1];
-        int maxGrauBase = calcularMaxGrauBase(vertices);
+        if (vertices == 1) {
+            grafo.arestas = 0;
+            return grafo;
+        }
 
-        // Gera um grau aleatório para cada vértice e força o grau a ser par.
-        int verticesComDeficit = 0;
-        for (int i = 1; i <= vertices; i++) {
-            int grauAleatorio = secureRandom.nextInt(maxGrauBase + 1);
-            if (grauAleatorio % 2 != 0) {
-                grauAleatorio++;
+        int[] ordem = gerarOrdemAleatoriaVertices(vertices, secureRandom);
+
+        if (vertices == 2) {
+            if (adicionarArestaNaoDirecionada(grafo, ordem[0], ordem[1])) {
+                grafo.arestas = 1;
             }
-            deficit[i] = grauAleatorio;
-            if (grauAleatorio > 0) {
-                verticesComDeficit++;
-            }
+            return grafo;
         }
 
         int arestasInseridas = 0;
-
-        while (verticesComDeficit > 0) {
-            int origem = sortearVerticeComDeficit(deficit, secureRandom);
-            if (origem == -1) {
-                break;
-            }
-
-            int destino;
-
-            if (verticesComDeficit == 1 && deficit[origem] >= 2) {
-                // Caso de único vértice restante: usa auto-laço para reduzir 2 no grau.
-                destino = origem;
-            } else {
-                destino = sortearOutroVerticeComDeficit(deficit, origem, secureRandom);
-                if (destino == -1) {
-                    // Sem par disponível: usa auto-laço para manter paridade.
-                    destino = origem;
-                }
-            }
-
-            grafo = adicionarArestaNaoDirecionada(grafo, origem, destino);
-            arestasInseridas++;
-
-            if (origem == destino) {
-                int antesOrigem = deficit[origem];
-                int depoisOrigem = antesOrigem - 2;
-                if (depoisOrigem < 0) {
-                    depoisOrigem = 0;
-                }
-                deficit[origem] = depoisOrigem;
-                if (antesOrigem > 0 && depoisOrigem == 0) {
-                    verticesComDeficit--;
-                }
-            } else {
-                int antesOrigem = deficit[origem];
-                int depoisOrigem = antesOrigem - 1;
-                if (depoisOrigem < 0) {
-                    depoisOrigem = 0;
-                }
-                deficit[origem] = depoisOrigem;
-                if (antesOrigem > 0 && depoisOrigem == 0) {
-                    verticesComDeficit--;
-                }
-
-                int antesDestino = deficit[destino];
-                int depoisDestino = antesDestino - 1;
-                if (depoisDestino < 0) {
-                    depoisDestino = 0;
-                }
-                deficit[destino] = depoisDestino;
-                if (antesDestino > 0 && depoisDestino == 0) {
-                    verticesComDeficit--;
-                }
+        for (int i = 0; i < vertices; i++) {
+            int origem = ordem[i];
+            int destino = ordem[(i + 1) % vertices];
+            if (adicionarArestaNaoDirecionada(grafo, origem, destino)) {
+                arestasInseridas++;
             }
         }
 
         grafo.arestas = arestasInseridas;
+        int alvoArestas = calcularAlvoArestasAleatorio(vertices, grafo.arestas, secureRandom);
+        densificarPreservandoParidade(grafo, secureRandom, alvoArestas);
+        garantirConectividadeViaDfs(grafo, secureRandom);
         return grafo;
     }
 
-    private Grafo adicionarArestaNaoDirecionada(Grafo grafo, int origem, int destino) {
+    private boolean adicionarArestaNaoDirecionada(Grafo grafo, int origem, int destino) {
+        if (origem == destino) {
+            return false;
+        }
+        if (grafo.fowardstar.existeAresta(origem, destino)) {
+            return false;
+        }
         grafo.fowardstar = grafo.fowardstar.inserirAresta(grafo.fowardstar, origem, destino);
         grafo.fowardstar = grafo.fowardstar.inserirAresta(grafo.fowardstar, destino, origem);
-        return grafo;
+        return true;
     }
 
     private int contarVerticesComDeficit(int[] deficit) {
@@ -551,37 +510,26 @@ class Grafo {
             return grafo;
         }
 
-        int[] graus = new int[vertices + 1];
-        int maxGrauBase = calcularMaxGrauBase(vertices);
-
-        // Sorteia o grau-base de cada vértice.
-        for (int i = 1; i <= vertices; i++) {
-            graus[i] = secureRandom.nextInt(maxGrauBase + 1);
+        if (vertices == 1) {
+            grafo.arestas = 0;
+            return grafo;
         }
 
-        // Em modo semi-euleriano, força exatamente 2 vértices ímpares.
-        int alvoImpares = (vertices >= 2) ? 2 : 0;
+        int[] ordem = gerarOrdemAleatoriaVertices(vertices, secureRandom);
+        int arestasInseridas = 0;
 
-        // Ajusta paridade para ficar com no máximo dois vértices ímpares.
-        List<Integer> impares = listarVerticesImpares(graus);
-        while (impares.size() > alvoImpares) {
-            int vertice = impares.remove(impares.size() - 1);
-            graus[vertice]++;
-        }
-        while (impares.size() < alvoImpares) {
-            int vertice = sortearVerticePar(graus, secureRandom);
-            if (vertice == -1) {
-                break;
+        for (int i = 0; i < vertices - 1; i++) {
+            int origem = ordem[i];
+            int destino = ordem[i + 1];
+            if (adicionarArestaNaoDirecionada(grafo, origem, destino)) {
+                arestasInseridas++;
             }
-            graus[vertice]++;
-            impares.add(vertice);
         }
-
-        // Monta stubs (repetições de vértices por grau) e emparelha aleatoriamente.
-        int[] stubs = montarStubs(graus, vertices);
-        int arestasInseridas = emparelharStubsEmLote(stubs, secureRandom, grafo);
 
         grafo.arestas = arestasInseridas;
+        int alvoArestas = calcularAlvoArestasAleatorio(vertices, grafo.arestas, secureRandom);
+        densificarPreservandoParidade(grafo, secureRandom, alvoArestas);
+        garantirConectividadeViaDfs(grafo, secureRandom);
         return grafo;
     }
 
@@ -656,40 +604,158 @@ class Grafo {
             throw new IllegalArgumentException("Para gerar grafo nao euleriano, use pelo menos 4 vertices.");
         }
 
-        int[] graus = new int[vertices + 1];
-        int maxGrauBase = calcularMaxGrauBase(vertices);
+        int[] ordem = gerarOrdemAleatoriaVertices(vertices, secureRandom);
+        int arestasInseridas = 0;
 
-        // Sorteia o grau-base de cada vértice.
-        for (int i = 1; i <= vertices; i++) {
-            graus[i] = secureRandom.nextInt(maxGrauBase + 1);
-        }
-
-        // Em grafo não direcionado, a quantidade de ímpares deve ser par.
-        int maxImpares = (vertices % 2 == 0) ? vertices : vertices - 1;
-        int quantidadeOpcoes = ((maxImpares - 4) / 2) + 1;
-        int alvoImpares = 4 + (2 * secureRandom.nextInt(quantidadeOpcoes));
-
-        // Ajusta paridade para ficar com mais de dois vértices ímpares.
-        List<Integer> impares = listarVerticesImpares(graus);
-        while (impares.size() > alvoImpares) {
-            int vertice = impares.remove(impares.size() - 1);
-            graus[vertice]++;
-        }
-        while (impares.size() < alvoImpares) {
-            int vertice = sortearVerticePar(graus, secureRandom);
-            if (vertice == -1) {
-                break;
+        for (int i = 0; i < vertices - 1; i++) {
+            int origem = ordem[i];
+            int destino = ordem[i + 1];
+            if (adicionarArestaNaoDirecionada(grafo, origem, destino)) {
+                arestasInseridas++;
             }
-            graus[vertice]++;
-            impares.add(vertice);
         }
 
-        // Monta stubs (repetições de vértices por grau) e emparelha aleatoriamente.
-        int[] stubs = montarStubs(graus, vertices);
-        int arestasInseridas = emparelharStubsEmLote(stubs, secureRandom, grafo);
+        int u = ordem[1];
+        int v = ordem[3];
+        if (adicionarArestaNaoDirecionada(grafo, u, v)) {
+            arestasInseridas++;
+        } else {
+            boolean inseriu = false;
+            for (int i = 1; i < vertices - 1 && !inseriu; i++) {
+                for (int j = i + 2; j < vertices - 1 && !inseriu; j++) {
+                    if (adicionarArestaNaoDirecionada(grafo, ordem[i], ordem[j])) {
+                        arestasInseridas++;
+                        inseriu = true;
+                    }
+                }
+            }
+        }
 
         grafo.arestas = arestasInseridas;
+        int alvoArestas = calcularAlvoArestasAleatorio(vertices, grafo.arestas, secureRandom);
+        densificarPreservandoParidade(grafo, secureRandom, alvoArestas);
+        garantirConectividadeViaDfs(grafo, secureRandom);
         return grafo;
+    }
+
+    private int calcularAlvoArestasAleatorio(int vertices, int minimoAtual, SecureRandom random) {
+        int maxGrauBase = calcularMaxGrauBase(vertices);
+        long alvoMinimo = Math.max((long) minimoAtual, (long) vertices);
+        long alvoMaximoPorGrau = ((long) vertices * (long) maxGrauBase) / 2L;
+        long maximoGrafoSimples = ((long) vertices * (long) (vertices - 1)) / 2L;
+
+        long alvoMaximo = Math.max(alvoMinimo, alvoMaximoPorGrau);
+        if (alvoMaximo > maximoGrafoSimples) {
+            alvoMaximo = maximoGrafoSimples;
+        }
+
+        if (alvoMaximo <= alvoMinimo) {
+            return (int) alvoMinimo;
+        }
+
+        long faixa = alvoMaximo - alvoMinimo + 1L;
+        long deslocamento = random.nextLong(faixa);
+        return (int) (alvoMinimo + deslocamento);
+    }
+
+    private void densificarPreservandoParidade(Grafo grafo, SecureRandom random, int alvoArestas) {
+        if (grafo.vertices < 3 || grafo.arestas >= alvoArestas) {
+            return;
+        }
+
+        long faltantes = Math.max(0, alvoArestas - grafo.arestas);
+        long limiteTentativas = Math.max((long) grafo.vertices * 20L, faltantes * 30L);
+        long tentativas = 0;
+
+        while (grafo.arestas + 3 <= alvoArestas && tentativas < limiteTentativas) {
+            int a = random.nextInt(grafo.vertices) + 1;
+            int b = random.nextInt(grafo.vertices) + 1;
+            int c = random.nextInt(grafo.vertices) + 1;
+
+            if (a == b || b == c || a == c) {
+                tentativas++;
+                continue;
+            }
+
+            if (grafo.fowardstar.existeAresta(a, b)
+                    || grafo.fowardstar.existeAresta(b, c)
+                    || grafo.fowardstar.existeAresta(c, a)) {
+                tentativas++;
+                continue;
+            }
+
+            if (adicionarArestaNaoDirecionada(grafo, a, b)
+                    && adicionarArestaNaoDirecionada(grafo, b, c)
+                    && adicionarArestaNaoDirecionada(grafo, c, a)) {
+                grafo.arestas += 3;
+            }
+
+            tentativas++;
+        }
+    }
+
+    private void garantirConectividadeViaDfs(Grafo grafo, SecureRandom random) {
+        if (grafo.ehConexoDfs()) {
+            return;
+        }
+
+        int limiteTentativas = grafo.vertices * 4;
+        int tentativas = 0;
+        while (!grafo.ehConexoDfs() && tentativas < limiteTentativas) {
+            int origem = random.nextInt(grafo.vertices) + 1;
+            int destino = random.nextInt(grafo.vertices) + 1;
+            if (adicionarArestaNaoDirecionada(grafo, origem, destino)) {
+                grafo.arestas++;
+            }
+            tentativas++;
+        }
+    }
+
+    private int[] gerarOrdemAleatoriaVertices(int vertices, SecureRandom random) {
+        int[] ordem = new int[vertices];
+        for (int i = 0; i < vertices; i++) {
+            ordem[i] = i + 1;
+        }
+
+        for (int i = vertices - 1; i > 0; i--) {
+            int j = random.nextInt(i + 1);
+            int tmp = ordem[i];
+            ordem[i] = ordem[j];
+            ordem[j] = tmp;
+        }
+        return ordem;
+    }
+
+    boolean ehConexoDfs() {
+        if (vertices <= 1) {
+            return true;
+        }
+
+        boolean[] visitado = new boolean[vertices + 1];
+        int[] pilha = new int[vertices];
+        int topo = 0;
+        pilha[topo++] = 1;
+        visitado[1] = true;
+
+        while (topo > 0) {
+            int atual = pilha[--topo];
+            No vizinho = fowardstar.primeiroDestinoDaOrigem(atual);
+            while (vizinho != null) {
+                int destino = vizinho.valor;
+                if (!visitado[destino]) {
+                    visitado[destino] = true;
+                    pilha[topo++] = destino;
+                }
+                vizinho = vizinho.proximoOrigem;
+            }
+        }
+
+        for (int i = 1; i <= vertices; i++) {
+            if (!visitado[i]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private int calcularMaxGrauBase(int vertices) {
@@ -755,6 +821,17 @@ class fowardstar {
             return -1;
         }
         return grauPorOrigem[vertice];
+    }
+
+    boolean existeAresta(int origem, int destino) {
+        No atual = primeiroDestinoDaOrigem(origem);
+        while (atual != null) {
+            if (atual.valor == destino) {
+                return true;
+            }
+            atual = atual.proximoOrigem;
+        }
+        return false;
     }
 
     fowardstar inserirAresta(fowardstar fowardstar, int origem, int destino) {

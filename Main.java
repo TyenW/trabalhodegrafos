@@ -565,7 +565,7 @@ class CaminhoEuleriano {
 
 public class Main {
     public static void main(String[] args) throws FileNotFoundException {
-        Grafos.lerGrafo(new File("graph.txt"));
+        Grafos.lerGrafo(new File("grafos100euleriano/grafo1/grafo.txt"));
         List <int[]> caminhoEuleriano = CaminhoEuleriano.pegarCaminhoEuleriano(Grafos.vertice);
         for(int i = 0; i < caminhoEuleriano.size(); i++){
             System.out.print(caminhoEuleriano.get(i)[0] + "-" + caminhoEuleriano.get(i)[1]);
@@ -575,3 +575,4 @@ public class Main {
         }
     }
 }
+
