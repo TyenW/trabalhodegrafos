@@ -59,6 +59,7 @@ class Vertice{
             pos++;
         }
         vizinhos.add(pos, valor);
+        this.grau++;
     }
 
     public void remover(int valor) {
