@@ -545,6 +545,27 @@ class CaminhoEuleriano {
         }
     }
 
+    //retorna se o grafo é euleriano, semi, ou não
+    public static String classificar() {
+        boolean[] visitado = new boolean[Grafos.vertice + 1];
+        int inicio = -1;
+        for (int i = 1; i <= Grafos.vertice; i++) {
+            if (Grafos.grafo[i].grau > 0) { inicio = i; break; }
+        }
+        if (inicio == -1) return "naoeuleriano";
+        contaVizinhos(inicio, visitado);
+        for (int i = 1; i <= Grafos.vertice; i++) {
+            if (Grafos.grafo[i].grau > 0 && !visitado[i]) return "naoeuleriano";
+        }
+        int impares = 0;
+        for (int i = 1; i <= Grafos.vertice; i++) {
+            if (Grafos.grafo[i].grau % 2 != 0) impares++;
+        }
+        if (impares == 0) return "euleriano";
+        if (impares == 2) return "semieuleriano";
+        return "naoeuleriano";
+    }
+    
     static List<int[]> pegarCaminhoEuleriano(int v) {
         int inicio = 1;
 
