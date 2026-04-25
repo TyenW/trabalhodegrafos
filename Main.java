@@ -62,7 +62,8 @@ class Vertice{
     }
 
     public void remover(int valor) {
-        vizinhos.remove(Integer.valueOf(valor));
+       boolean removeu = vizinhos.remove(Integer.valueOf(valor));
+        if (removeu) {this.grau--; }
     }
 }
 
