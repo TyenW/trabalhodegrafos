@@ -1,3 +1,6 @@
+import java.io.*;
+import java.util.*;
+
 //classe para ler e ver as pastas
 class pathfilefinder{
 

@@ -1,6 +1,5 @@
 import java.io.*;
 import java.util.*;
-import java.util.concurrent.*;
 
 /*
  * ORIGENS E ATRIBUIÇÕES
@@ -9,34 +8,34 @@ import java.util.concurrent.*;
  *   Reaproveitada das implementações anteriores pelo aluno Filipe Nery.
  *
  * Algoritmo Naïve de identificação de pontes:
- *   Implementado com base na definição clássica: remove cada aresta e testa
- *   conectividade via DFS. Complexidade O(E * (V+E)).
+ *   Implementado com base na definição clássica: remove cada aresta candidata
+ *   e testa a conectividade via DFS. Complexidade O(E * (V+E)).
  *
  * Algoritmo de Tarjan (1974):
  *   Implementado com base no artigo original:
  *     Tarjan, R. E. (1974). A note on finding the bridges of a graph.
  *     Information Processing Letters, 2(6), 160-161.
  *     https://doi.org/10.1016/0020-0190(74)90003-9
- *   A lógica central (low[], td[], propagação do low ao pai) é fiel ao artigo.
+ *   A lógica central — DFS com arrays td[] (tempo de descoberta) e low[]
+ *   (menor td alcançável), com propagação do low ao pai na volta da recursão —
+ *   é preservada intacta em relação ao artigo original.
  *
- *   VARIANTE 1 — Tarjan com cache por passo (isPonte):
- *   Executa o Tarjan completo (O(V+E)) uma única vez por passo do Fleury,
- *   armazenando o resultado em um HashSet de pares codificados como long.
- *   O cache é invalidado após cada remoção de aresta; consultas dentro do
- *   mesmo passo respondem em O(1). Complexidade total do Fleury: O(E*(V+E)).
- *   A ideia de recomputação preguiçosa é análoga ao padrão "lazy recomputation"
- *   descrito em Skiena, S. (2008). The Algorithm Design Manual (2nd ed.), Springer.
- *
- *   VARIANTE 2 — Tarjan otimizado com DFS de alcançabilidade (isPonteOtimizado):
- *   Para verificar se (u,v) é ponte no Fleury, substitui o Tarjan global por
- *   uma DFS de alcançabilidade local: remove (u,v), verifica se v ainda é
- *   alcançável a partir de u, restaura. O(V+E) por candidata, sem recomputar
- *   arrays globais. Mantém o critério de ponte (desconexão do grafo) conceitualmente
- *   fiel ao enunciado. A lógica do Tarjan (low[], td[]) é preservada intacta;
- *   apenas o mecanismo de consulta no Fleury é substituído por DFS de alcance.
+ *   OTIMIZAÇÃO DE IMPLEMENTAÇÃO — cache por passo no Fleury:
+ *   Na versão direta, isPonte(u,v) executaria o Tarjan completo (O(V+E)) para
+ *   cada aresta candidata dentro de um mesmo passo do Fleury. A otimização
+ *   consiste em executar o Tarjan uma única vez por passo, armazenando as pontes
+ *   encontradas em um HashSet<Long> (pares (u,v) codificados como long).
+ *   O cache é invalidado após cada remoção de aresta; consultas dentro do mesmo
+ *   passo respondem em O(1). A teoria do Tarjan não é alterada — apenas o momento
+ *   da invocação é adiado até que seja necessário. Padrão análogo ao "lazy
+ *   recomputation" descrito em Skiena, S. (2008). The Algorithm Design Manual
+ *   (2nd ed.), Springer.
  *
  * Algoritmo de Fleury:
- *   Inspirado na descrição canônica disponível em:
+ *   Há um único método de Fleury, parametrizado pelo modo de detecção de pontes
+ *   (Naive ou Tarjan). A lógica do Fleury — percorrer arestas não-ponte
+ *   preferencialmente, recorrendo a pontes apenas quando não há alternativa —
+ *   é fiel à descrição canônica em:
  *   https://www.geeksforgeeks.org/dsa/fleurys-algorithm-for-printing-eulerian-path/
  */
 
@@ -62,14 +61,6 @@ class Vertice {
     public int contarVizinhos() { return this.vizinhos.size(); }
 
     public ArrayList<Integer> getVizinhos() { return this.vizinhos; }
-
-    public void imprimir() {
-        System.out.println("\nVertice visualizado: " + vertice);
-        System.out.println("(i) Grau: " + contarVizinhos());
-        System.out.print("(ii) Conjunto de vizinhos: ");
-        for (int i : vizinhos) System.out.print(i + " ");
-        System.out.println();
-    }
 
     public void ordenar() { Collections.sort(vizinhos); }
 
@@ -110,7 +101,7 @@ class Grafos {
         componentes = 0;
     }
 
-    /** Cópia profunda do grafo — necessária para restaurar entre rodadas do batch. */
+    /** Copia profunda — necessaria para restaurar o grafo entre rodadas do batch. */
     public static Vertice[] clonarGrafo() {
         Vertice[] c = new Vertice[vertice + 1];
         for (int i = 1; i <= vertice; i++) {
@@ -120,7 +111,6 @@ class Grafos {
         return c;
     }
 
-    /** Restaura o grafo principal a partir de um backup obtido via clonarGrafo(). */
     public static void restaurarGrafo(Vertice[] backup) {
         for (int i = 1; i <= vertice; i++) {
             grafo[i].vizinhos = new ArrayList<>(backup[i].vizinhos);
@@ -145,10 +135,10 @@ class Grafos {
             String nome = in.nextLine().trim() + ".txt";
             arq = new File(nome);
             if (!arq.exists()) {
-                System.out.println("Arquivo '" + nome + "' não encontrado.");
+                System.out.println("Arquivo '" + nome + "' nao encontrado.");
                 File[] txts = new File(".").listFiles((d, n) -> n.endsWith(".txt"));
                 if (txts != null && txts.length > 0) {
-                    System.out.println("Disponíveis:");
+                    System.out.println("Disponiveis:");
                     for (File f : txts)
                         System.out.println("  " + f.getName().replace(".txt", ""));
                 }
@@ -165,7 +155,7 @@ class Grafos {
 }
 
 // ---------------------------------------------------------------------------
-// DFS utilitária
+// DFS utilitaria
 // ---------------------------------------------------------------------------
 class DFS {
     static int   t;
@@ -174,7 +164,7 @@ class DFS {
     static int[] pai;
     static int[] low;
 
-    /** DFS completa para contagem de componentes conexas. */
+    /** DFS completa para contagem de componentes conexas (usada pelo Naive). */
     public static void dfs() {
         t = 0;
         Grafos.componentes = 0;
@@ -199,10 +189,7 @@ class DFS {
         }
     }
 
-    /**
-     * DFS de alcançabilidade a partir de 'raiz'.
-     * Preenche visitado[] com todos os vértices alcançáveis no grafo atual.
-     */
+    /** DFS de alcancabilidade — usada na classificacao euleriana do Fleury. */
     public static void dfsAlcance(int raiz, boolean[] visitado) {
         Deque<Integer> pilha = new ArrayDeque<>();
         pilha.push(raiz);
@@ -216,10 +203,13 @@ class DFS {
     }
 
     /**
-     * DFS de Tarjan iterativa — calcula low[] e td[].
-     * frame: [vId, paiId, índiceVizinho, contadorRetornoAoPai]
-     * O contadorRetornoAoPai trata arestas paralelas: a primeira volta ao pai
-     * é ignorada (aresta de árvore); as demais atualizam low normalmente.
+     * DFS de Tarjan iterativa — calcula td[] e low[].
+     * Fiel ao algoritmo original: low[v] = min(td[v], min(td[w]) para w
+     * adjacente ja descoberto, min(low[filho]) para filhos na arvore DFS).
+     * O frame guarda [vId, paiId, indiceVizinho, contadorVoltaAoPai].
+     * O contador de volta ao pai trata a primeira aresta de retorno ao pai
+     * como aresta de arvore (ignorada), e as demais como arestas de retorno
+     * genuinas — comportamento correto para grafos simples sem arestas paralelas.
      */
     public static void buscaProfundidadeTarjan(int raiz, int paiRaiz) {
         Deque<int[]> pilha = new ArrayDeque<>();
@@ -232,9 +222,12 @@ class DFS {
             if (frame[2] < viz.size()) {
                 int ws = viz.get(frame[2]++);
                 if (td[ws] == 0) {
-                    pai[ws] = vId; td[ws] = low[ws] = ++t;
+                    pai[ws] = vId;
+                    td[ws] = low[ws] = ++t;
                     pilha.push(new int[]{ws, vId, 0, 0});
                 } else if (ws == pId) {
+                    // Primeira volta ao pai: aresta de arvore — ignora
+                    // Voltas subsequentes: aresta de retorno genuina
                     if (frame[3] == 0) frame[3]++;
                     else low[vId] = Math.min(low[vId], td[ws]);
                 } else {
@@ -250,31 +243,14 @@ class DFS {
 }
 
 // ---------------------------------------------------------------------------
-// Naive — identificação de pontes por remoção e teste de conectividade
+// Naive — identificacao de pontes por remocao e teste de conectividade
 // ---------------------------------------------------------------------------
 class Naive {
-    public static ArrayList<String> pontes = new ArrayList<>();
-
-    /** Lista todas as pontes do grafo via força bruta. */
-    public static void naive() {
-        pontes.clear();
-        DFS.dfs();
-        int orig = Grafos.componentes;
-        for (int i = 1; i <= Grafos.vertice; i++) {
-            ArrayList<Integer> viz = new ArrayList<>(Grafos.grafo[i].getVizinhos());
-            for (int j : viz) {
-                if (j <= i) continue;
-                Grafos.removerAresta(i, j);
-                DFS.dfs();
-                if (Grafos.componentes > orig) pontes.add(i + " - " + j);
-                Grafos.restaurarAresta(i, j);
-            }
-        }
-    }
 
     /**
-     * Verifica se (u,v) é ponte: remove, testa conectividade via DFS, restaura.
-     * Semântica do enunciado preservada. Complexidade: O(V+E) por chamada.
+     * Verifica se (u,v) e ponte: remove a aresta, executa DFS para contar
+     * componentes, restaura. Se o numero de componentes aumentou, e ponte.
+     * Complexidade: O(V+E) por chamada — semantica exata do enunciado.
      */
     public static boolean isPonte(int u, int v) {
         DFS.dfs();
@@ -288,12 +264,19 @@ class Naive {
 }
 
 // ---------------------------------------------------------------------------
-// Tarjan — identificação de pontes via low[]
+// Tarjan — identificacao de pontes via low[]
 // ---------------------------------------------------------------------------
 class Tarjan {
-    public static ArrayList<String> pontes = new ArrayList<>();
 
-    // Cache de pontes — Variante 1 (cache por passo no Fleury)
+    /*
+     * Cache de pontes para uso no Fleury.
+     * O Tarjan e executado integralmente (O(V+E)) uma unica vez por passo;
+     * o resultado e armazenado em um HashSet<Long> onde cada par (a,b), a<=b,
+     * e codificado como ((long)a << 32) | b para acesso O(1).
+     * O cache e invalidado (cacheValido = false) apos cada remocao de aresta,
+     * forcando uma nova execucao do Tarjan no proximo passo que precisar de
+     * informacao de ponte. A logica do Tarjan em si nao e alterada.
+     */
     private static Set<Long> pontesCache = new HashSet<>();
     private static boolean   cacheValido = false;
 
@@ -304,85 +287,42 @@ class Tarjan {
         return ((long) a << 32) | (b & 0xFFFFFFFFL);
     }
 
-    /** Executa Tarjan completo e popula Tarjan.pontes. */
-    public static void tarjan() {
-        pontes.clear();
-        int tam = Grafos.vertice + 1;
-        DFS.td = new int[tam]; DFS.low = new int[tam];
-        DFS.pai = new int[tam]; DFS.t = 0;
-        for (int i = 1; i <= Grafos.vertice; i++)
-            if (DFS.td[i] == 0) DFS.buscaProfundidadeTarjan(i, -1);
-        for (int i = 1; i <= Grafos.vertice; i++) {
-            int p = DFS.pai[i];
-            if (p != 0 && DFS.low[i] > DFS.td[p]) pontes.add(p + " - " + i);
-        }
-    }
-
+    /** Executa Tarjan completo e reconstroi o cache de pontes. */
     private static void reconstruirCache() {
         pontesCache.clear();
         int tam = Grafos.vertice + 1;
-        DFS.td = new int[tam]; DFS.low = new int[tam];
-        DFS.pai = new int[tam]; DFS.t = 0;
+        DFS.td  = new int[tam];
+        DFS.low = new int[tam];
+        DFS.pai = new int[tam];
+        DFS.t   = 0;
         for (int i = 1; i <= Grafos.vertice; i++)
             if (DFS.td[i] == 0) DFS.buscaProfundidadeTarjan(i, -1);
         for (int i = 1; i <= Grafos.vertice; i++) {
             int p = DFS.pai[i];
-            if (p != 0 && DFS.low[i] > DFS.td[p]) pontesCache.add(chave(p, i));
+            if (p != 0 && DFS.low[i] > DFS.td[p])
+                pontesCache.add(chave(p, i));
         }
         cacheValido = true;
     }
 
     /**
-     * Variante 1 — cache por passo:
-     * Tarjan reexecutado apenas quando o cache está inválido (após remoção de aresta).
-     * Custo: O(V+E) uma vez por passo do Fleury; consultas subsequentes em O(1).
+     * Consulta de ponte para uso no Fleury.
+     * Reconstroi o cache (O(V+E)) apenas quando invalidado; caso contrario O(1).
      */
     public static boolean isPonte(int u, int v) {
         if (!cacheValido) reconstruirCache();
         return pontesCache.contains(chave(u, v));
     }
-
-    /**
-     * Variante 2 — DFS de alcançabilidade local:
-     * Remove (u,v), verifica alcançabilidade de v a partir de u, restaura.
-     * Equivalente ao critério low[v] > td[u] do Tarjan para grafos simples.
-     * Evita recomputar arrays globais; O(V+E) por candidata.
-     */
-    public static boolean isPonteOtimizado(int u, int v) {
-        if (Grafos.grafo[u].vizinhos.size() == 1) return true;
-        Grafos.removerAresta(u, v);
-        boolean[] visitado = new boolean[Grafos.vertice + 1];
-        DFS.dfsAlcance(u, visitado);
-        boolean ehPonte = !visitado[v];
-        Grafos.restaurarAresta(u, v);
-        return ehPonte;
-    }
-
-    public void imprimirPontes() {
-        if (pontes.isEmpty()) {
-            System.out.println("Nenhuma ponte encontrada.");
-        } else {
-            for (String p : pontes) System.out.println("Aresta " + p + " e uma ponte.");
-            System.out.println("Total: " + pontes.size() + " ponte(s)");
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
-// CaminhoEuleriano — algoritmo de Fleury (três variantes de isPonte)
+// CaminhoEuleriano — algoritmo de Fleury unico, parametrizado pelo modo
 // ---------------------------------------------------------------------------
 class CaminhoEuleriano {
 
-    public enum Modo { NAIVE, TARJAN_ORIGINAL, TARJAN_OTIMIZADO }
+    public enum Modo { NAIVE, TARJAN }
 
     public static List<int[]> arestas;
-
-    /**
-     * Flag de cancelamento — setada pela thread de timeout do Experimento.
-     * O loop do percorrer verifica esta flag a cada passo e para imediatamente
-     * se ela estiver ativa, permitindo que o timeout seja efetivo.
-     */
-    static volatile boolean cancelado = false;
 
     /** Classifica o grafo: "euleriano", "semieuleriano" ou "naoeuleriano". */
     public static String classificar() {
@@ -404,39 +344,41 @@ class CaminhoEuleriano {
         return "naoeuleriano";
     }
 
+    /**
+     * Verifica se a aresta (atual -> prox) e valida para o Fleury:
+     * pode ser usada se nao for ponte, ou se for a unica aresta disponivel.
+     */
     private static boolean arestaValida(int atual, int prox, Modo modo) {
         if (Grafos.grafo[atual].vizinhos.size() == 1) return true;
-        switch (modo) {
-            case NAIVE:            return !Naive.isPonte(atual, prox);
-            case TARJAN_ORIGINAL:  return !Tarjan.isPonte(atual, prox);
-            case TARJAN_OTIMIZADO: return !Tarjan.isPonteOtimizado(atual, prox);
-            default: return false;
-        }
+        return modo == Modo.NAIVE
+                ? !Naive.isPonte(atual, prox)
+                : !Tarjan.isPonte(atual, prox);
     }
 
     private static void percorrer(int inicio, Modo modo) {
         int atual = inicio;
-        // Verifica cancelado a cada passo — permite interrupção por timeout
-        while (!cancelado && !Grafos.grafo[atual].vizinhos.isEmpty()) {
+        while (!Grafos.grafo[atual].vizinhos.isEmpty()) {
+            // Snapshot para evitar ConcurrentModificationException
             int[] candidatos = Grafos.grafo[atual].vizinhos.stream()
                     .mapToInt(Integer::intValue).toArray();
             int escolhido = -1;
             for (int c : candidatos) {
-                if (cancelado) return;
                 if (!Grafos.grafo[atual].vizinhos.contains(c)) continue;
                 if (arestaValida(atual, c, modo)) { escolhido = c; break; }
             }
             if (escolhido == -1) break;
             arestas.add(new int[]{atual, escolhido});
             Grafos.removerAresta(atual, escolhido);
-            if (modo == Modo.TARJAN_ORIGINAL) Tarjan.invalidarCache();
+            if (modo == Modo.TARJAN) Tarjan.invalidarCache();
             atual = escolhido;
         }
     }
 
     /**
-     * Executa Fleury com o modo especificado.
-     * Retorna lista vazia se o grafo não admite caminho euleriano ou foi cancelado.
+     * Ponto de entrada do Fleury.
+     * Determina o vertice inicial (grau impar para semi-euleriano, qualquer
+     * vertice ativo para euleriano) e executa o percurso.
+     * Retorna lista vazia se o grafo nao admite caminho euleriano.
      */
     public static List<int[]> executar(Modo modo) {
         arestas = new ArrayList<>();
@@ -449,205 +391,107 @@ class CaminhoEuleriano {
                 if (Grafos.grafo[i].grau % 2 != 0) { inicio = i; break; }
             }
         }
-        if (modo == Modo.TARJAN_ORIGINAL) Tarjan.invalidarCache();
+        if (modo == Modo.TARJAN) Tarjan.invalidarCache();
         percorrer(inicio, modo);
         return arestas;
     }
 }
 
 // ---------------------------------------------------------------------------
-// Experimento — execução em batch com medição de tempo e barra de progresso
+// Experimento — execucao em batch com medicao de tempo e barra de progresso
 // ---------------------------------------------------------------------------
 class Experimento {
-
-    private static final long LIMITE_NS = 4L * 1_000_000_000L;
-
-    private static final String[] NOMES = {
-        "naive-fleury",
-        "tarjan-fleury-original",
-        "tarjan-fleury-otimizado"
-    };
-
-    private static final CaminhoEuleriano.Modo[] MODOS = {
-        CaminhoEuleriano.Modo.NAIVE,
-        CaminhoEuleriano.Modo.TARJAN_ORIGINAL,
-        CaminhoEuleriano.Modo.TARJAN_OTIMIZADO
-    };
 
     private static final int LARGURA_BARRA = 40;
 
     /**
-     * Imprime (ou atualiza no lugar) a barra de progresso.
-     * Usa \r para sobrescrever a linha atual — funciona em terminais ANSI.
-     *
-     * Formato:
-     *   [████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░]  42%  |  1/5 rodadas  |  naive-fleury (2/3)
-     *
-     * execTotal  : total de execuções individuais (MODOS.length * rodadas)
-     * execFeitas : quantas já concluíram
-     * rodadaAtual: índice da rodada global completa (todas 3 feitas) — para "X/N rodadas"
-     * rodadas    : total de rodadas pedidas
-     * nomeAlg    : algoritmo em execução agora
-     * rodAlg     : rodada atual deste algoritmo
-     * totalAlg   : total de rodadas deste algoritmo
+     * Atualiza a barra de progresso na mesma linha via \r.
+     * Formato: [████░░░░░░░░░░░░░░░░░░░]  42%  |  1/5 rodadas  |  fleury-tarjan (2/5)
      */
-    private static void imprimirBarra(int execTotal, int execFeitas,
-                                      int rodadaCompleta, int rodadas,
-                                      String nomeAlg, int rodAlg, int totalAlg) {
-        int preenchido = (execTotal == 0) ? 0 : (execFeitas * LARGURA_BARRA) / execTotal;
-        int vazio      = LARGURA_BARRA - preenchido;
-        int pct        = (execTotal == 0) ? 0 : (execFeitas * 100) / execTotal;
-
+    private static void imprimirBarra(int total, int feitos, int rodadaCompleta,
+                                       int rodadas, String nomeAlg, int rodAlg) {
+        int preenchido = total == 0 ? 0 : (feitos * LARGURA_BARRA) / total;
+        int pct        = total == 0 ? 0 : (feitos * 100) / total;
         StringBuilder barra = new StringBuilder("[");
-        for (int i = 0; i < preenchido; i++) barra.append('\u2588'); // bloco cheio
-        for (int i = 0; i < vazio;      i++) barra.append('\u2591'); // bloco vazio
+        for (int i = 0; i < preenchido;              i++) barra.append('\u2588');
+        for (int i = preenchido; i < LARGURA_BARRA;  i++) barra.append('\u2591');
         barra.append("]");
-
-        String linha = String.format("\r%s %3d%%  |  %d/%d rodadas  |  %s (%d/%d)",
-                barra, pct, rodadaCompleta, rodadas, nomeAlg, rodAlg, totalAlg);
-
-        System.out.print(linha);
+        System.out.printf("\r%s %3d%%  |  %d/%d rodadas  |  %s (%d/%d)",
+                barra, pct, rodadaCompleta, rodadas, nomeAlg, rodAlg, rodadas);
         System.out.flush();
     }
 
     /**
-     * Roda cada algoritmo 'rodadas' vezes com timeout real de 60s por execução.
+     * Executa o Fleury com os modos selecionados, 'rodadas' vezes cada.
+     * O grafo e clonado antes e restaurado depois de cada rodada (Fleury
+     * consome arestas). Os tempos sao gravados em tempos.txt ao final.
      *
-     * Mecanismo de timeout:
-     *   O Fleury é submetido a um ExecutorService de thread única.
-     *   Se não concluir em 60s, o Future é cancelado e a flag
-     *   CaminhoEuleriano.cancelado é setada — o loop do percorrer para
-     *   na próxima verificação da flag. O grafo é restaurado antes da
-     *   próxima rodada independentemente do resultado.
-     *
-     * Exibe barra de progresso em tempo real.
-     * Resultados gravados em tempos.txt.
+     * @param modos    lista de modos a executar (NAIVE, TARJAN, ou ambos)
+     * @param rodadas  numero de repeticoes por modo
+     * @param arqGrafo arquivo fonte (para cabecalho do relatorio)
      */
-    public static void rodar(int rodadas, File arqGrafo) {
-        int totalExec      = MODOS.length * rodadas;
-        int execFeitas     = 0;
+    public static void rodar(List<CaminhoEuleriano.Modo> modos, int rodadas, File arqGrafo) {
+        int totalExec  = modos.size() * rodadas;
+        int execFeitas = 0;
         int rodadaCompleta = 0;
 
-        System.out.println("Iniciando batch: " + rodadas
-                + " rodada(s) x " + MODOS.length + " algoritmos"
-                + " = " + totalExec + " execucoes no total.");
-        System.out.println();
+        String[] nomes = modos.stream()
+                .map(m -> m == CaminhoEuleriano.Modo.NAIVE ? "fleury-naive" : "fleury-tarjan")
+                .toArray(String[]::new);
+
+        System.out.println("\nIniciando batch: " + rodadas + " rodada(s) x "
+                + modos.size() + " algoritmo(s) = " + totalExec + " execucoes.\n");
 
         List<String> linhas = new ArrayList<>();
         linhas.add("Arquivo : " + arqGrafo.getName());
         linhas.add("Vertices: " + Grafos.vertice);
         linhas.add("Arestas : " + Grafos.arestas);
         linhas.add("Rodadas : " + rodadas);
-        linhas.add("Limite  : 60 s por execucao");
         linhas.add("-------------------------------------------------------------------");
-        linhas.add(String.format("%-28s  %6s  %14s  %14s  %s",
-                "algoritmo", "rodada", "tempo_ms", "tempo_s", "status"));
+        linhas.add(String.format("%-16s  %6s  %14s  %14s",
+                "algoritmo", "rodada", "tempo_ms", "tempo_s"));
         linhas.add("-------------------------------------------------------------------");
 
-        imprimirBarra(totalExec, 0, 0, rodadas, NOMES[0], 0, rodadas);
+        imprimirBarra(totalExec, 0, 0, rodadas, nomes[0], 0);
 
-        double[][] temposMs = new double[MODOS.length][rodadas];
-        int[]      contagem = new int[MODOS.length];
-        boolean[]  inviavel = new boolean[MODOS.length];
-
-        // Thread única para rodar o Fleury — permite interrupção via Future.cancel()
-        ExecutorService exec = Executors.newSingleThreadExecutor();
+        // acumula tempos para calcular media ao final
+        double[][] temposMs = new double[modos.size()][rodadas];
+        int[]      contagem = new int[modos.size()];
 
         for (int r = 1; r <= rodadas; r++) {
-            for (int a = 0; a < MODOS.length; a++) {
-                final int algIdx = a;
-
-                if (inviavel[a]) {
-                    execFeitas++;
-                    imprimirBarra(totalExec, execFeitas,
-                            execFeitas / MODOS.length, rodadas,
-                            NOMES[a] + " [PULADO]", r, rodadas);
-                    continue;
-                }
-
-                imprimirBarra(totalExec, execFeitas, rodadaCompleta, rodadas,
-                        NOMES[a], r, rodadas);
+            for (int a = 0; a < modos.size(); a++) {
+                imprimirBarra(totalExec, execFeitas, rodadaCompleta, rodadas, nomes[a], r);
 
                 Vertice[] backup = Grafos.clonarGrafo();
 
-                // Reseta flag antes de cada execução
-                CaminhoEuleriano.cancelado = false;
-
-                final CaminhoEuleriano.Modo modo = MODOS[a];
                 long ini = System.nanoTime();
-
-                Future<?> future = exec.submit(() -> CaminhoEuleriano.executar(modo));
-
-                boolean timedOut = false;
-                try {
-                    future.get(60, TimeUnit.SECONDS);
-                } catch (TimeoutException e) {
-                    // Para o loop do Fleury na próxima verificação da flag
-                    CaminhoEuleriano.cancelado = true;
-                    future.cancel(true);
-                    // Aguarda a thread realmente parar antes de restaurar o grafo
-                    try { future.get(5, TimeUnit.SECONDS); } catch (Exception ignored) {}
-                    timedOut = true;
-                } catch (InterruptedException | ExecutionException e) {
-                    CaminhoEuleriano.cancelado = true;
-                    future.cancel(true);
-                    timedOut = true;
-                }
-
+                CaminhoEuleriano.executar(modos.get(a));
                 long durNs = System.nanoTime() - ini;
 
-                // Restaura o grafo sempre — independente de timeout ou sucesso
                 Grafos.restaurarGrafo(backup);
                 execFeitas++;
 
                 double durMs = durNs / 1_000_000.0;
-                double durS  = durNs / 1_000_000_000.0;
-                String status;
+                temposMs[a][contagem[a]++] = durMs;
 
-                if (timedOut) {
-                    status = "TIMEOUT — inviavel para este grafo";
-                    inviavel[algIdx] = true;
-                } else {
-                    status = "ok";
-                    temposMs[algIdx][contagem[algIdx]] = durMs;
-                    contagem[algIdx]++;
-                }
-
-                linhas.add(String.format("%-28s  %6d  %14.3f  %14.6f  %s",
-                        NOMES[a], r, durMs, durS, status));
-
-                if (timedOut && r < rodadas) {
-                    linhas.add(String.format("%-28s  %6s  %14s  %14s  %s",
-                            NOMES[a], (r + 1) + ".." + rodadas, "-", "-",
-                            "PULADO (timeout na rodada " + r + ")"));
-                }
+                linhas.add(String.format("%-16s  %6d  %14.3f  %14.6f",
+                        nomes[a], r, durMs, durNs / 1_000_000_000.0));
             }
-
             rodadaCompleta = r;
             imprimirBarra(totalExec, execFeitas, rodadaCompleta, rodadas,
-                    rodadaCompleta < rodadas ? NOMES[0] : "concluido",
-                    rodadaCompleta, rodadas);
+                    rodadaCompleta < rodadas ? nomes[0] : "concluido", rodadaCompleta);
         }
-
-        exec.shutdownNow();
 
         System.out.println();
         System.out.println();
 
         linhas.add("-------------------------------------------------------------------");
-        for (int a = 0; a < MODOS.length; a++) {
-            linhas.add("");
-            if (contagem[a] > 0) {
-                double soma = 0;
-                for (int k = 0; k < contagem[a]; k++) soma += temposMs[a][k];
-                double media = soma / contagem[a];
-                linhas.add(String.format("%-28s  %6s  %14.3f  %14.6f  %s",
-                        NOMES[a] + " [MEDIA]", "-", media, media / 1000.0, "-"));
-            } else {
-                linhas.add(String.format("%-28s  %6s  %14s  %14s  %s",
-                        NOMES[a] + " [MEDIA]", "-", "-", "-",
-                        "sem dados (todas as rodadas excederam o limite)"));
-            }
+        for (int a = 0; a < modos.size(); a++) {
+            double soma = 0;
+            for (int k = 0; k < contagem[a]; k++) soma += temposMs[a][k];
+            linhas.add(String.format("%-16s  %6s  %14.3f  %14.6f",
+                    nomes[a] + " [MEDIA]", "-", soma / contagem[a],
+                    soma / contagem[a] / 1000.0));
         }
 
         try (PrintWriter pw = new PrintWriter(new BufferedWriter(new FileWriter("tempos.txt")))) {
@@ -669,7 +513,7 @@ public class Main {
 
     public static void main(String[] args) {
 
-        // 1. Solicita e carrega o arquivo
+        // 1. Carrega o grafo
         File arq = Grafos.solicitarArquivo(in);
         try {
             Grafos.lerGrafo(arq);
@@ -680,8 +524,8 @@ public class Main {
         System.out.println("Grafo carregado: " + Grafos.vertice
                 + " vertices, " + Grafos.arestas + " arestas.");
 
-        // 2. Modo de execução
-        System.out.print("Executar teste em batch (todos os algoritmos N vezes)? (s/n): ");
+        // 2. Modo de execucao
+        System.out.print("Deseja realizar testes? (s/n): ");
         String resp = in.nextLine().trim().toLowerCase();
 
         if (resp.equals("s") || resp.equals("sim")) {
@@ -693,30 +537,44 @@ public class Main {
 
     // -----------------------------------------------------------------------
     private static void modoBatch(File arqGrafo) {
-        System.out.print("Numero de rodadas por algoritmo: ");
+        System.out.println("Algoritmo para os testes:");
+        System.out.println("  1. Fleury-Naive");
+        System.out.println("  2. Fleury-Tarjan");
+        System.out.println("  3. Ambos");
+        System.out.print("Opcao: ");
+        int opcao = lerInt();
+
+        List<CaminhoEuleriano.Modo> modos = new ArrayList<>();
+        switch (opcao) {
+            case 1: modos.add(CaminhoEuleriano.Modo.NAIVE);  break;
+            case 2: modos.add(CaminhoEuleriano.Modo.TARJAN); break;
+            case 3:
+                modos.add(CaminhoEuleriano.Modo.NAIVE);
+                modos.add(CaminhoEuleriano.Modo.TARJAN);
+                break;
+            default: System.out.println("Opcao invalida."); return;
+        }
+
+        System.out.print("Numero de rodadas: ");
         int rodadas = lerInt();
         if (rodadas < 1) { System.out.println("Numero invalido."); return; }
-        Experimento.rodar(rodadas, arqGrafo);
+
+        Experimento.rodar(modos, rodadas, arqGrafo);
     }
 
     // -----------------------------------------------------------------------
     private static void modoIndividual() {
         System.out.println("Escolha o algoritmo:");
-        System.out.println("  1. Naive");
-        System.out.println("  2. Tarjan original (cache por passo)");
-        System.out.println("  3. Tarjan otimizado (DFS de alcancabilidade)");
+        System.out.println("  1. Fleury-Naive");
+        System.out.println("  2. Fleury-Tarjan");
         System.out.print("Opcao: ");
         int opcao = lerInt();
 
         CaminhoEuleriano.Modo modo;
         String nomeAlg;
         switch (opcao) {
-            case 1: modo = CaminhoEuleriano.Modo.NAIVE;
-                    nomeAlg = "naive"; break;
-            case 2: modo = CaminhoEuleriano.Modo.TARJAN_ORIGINAL;
-                    nomeAlg = "tarjan-original"; break;
-            case 3: modo = CaminhoEuleriano.Modo.TARJAN_OTIMIZADO;
-                    nomeAlg = "tarjan-otimizado"; break;
+            case 1: modo = CaminhoEuleriano.Modo.NAIVE;  nomeAlg = "fleury-naive";  break;
+            case 2: modo = CaminhoEuleriano.Modo.TARJAN; nomeAlg = "fleury-tarjan"; break;
             default: System.out.println("Opcao invalida."); return;
         }
 
@@ -724,12 +582,10 @@ public class Main {
 
         long ini = System.nanoTime();
         List<int[]> caminho = CaminhoEuleriano.executar(modo);
-        long fim = System.nanoTime();
-        long durNs = fim - ini;
+        long durNs = System.nanoTime() - ini;
 
         Grafos.restaurarGrafo(backup);
 
-        // Imprime caminho no terminal
         if (caminho.isEmpty()) {
             System.out.println("O grafo nao possui caminho euleriano.");
         } else {
@@ -741,15 +597,12 @@ public class Main {
             System.out.println(sb);
         }
 
-        // Estatísticas no terminal
         System.out.println("\n=== ESTATISTICAS ===");
         System.out.println("Vertices : " + Grafos.vertice);
         System.out.println("Arestas  : " + Grafos.arestas);
         System.out.println("Algoritmo: " + nomeAlg);
         System.out.printf( "Tempo    : %.3f ms%n",  durNs / 1_000_000.0);
         System.out.printf( "Tempo    : %.6f s%n",   durNs / 1_000_000_000.0);
-        if (durNs > 4L * 1_000_000_000L)
-            System.out.println("AVISO: tempo excedeu 60 s — algoritmo inviavel para este grafo.");
     }
 
     private static int lerInt() {
