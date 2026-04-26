@@ -1,73 +1,92 @@
 import java.io.*;
-import java.util.ArrayList;
-import java.lang.reflect.Field;
 import java.util.*;
+
 /*
-    A maioria dos algoritmos utilizados foram reaproveitados das implementações anteriores pelo aluno Filipe Nery
-    O algoritmo de Tarjan foi implementado utilizando como base o artigo do Tarjan, e também algumas modificações
-    O algoritmo ingênuo foi implementado com base na definição clássica de ponte em grafos
-    O algoritmo de Fleury foi inspirado no algoritmo ensinado em https://www.geeksforgeeks.org/dsa/fleurys-algorithm-for-printing-eulerian-path/
+ * ORIGENS E ATRIBUIÇÕES
+ *
+ * Estrutura base do grafo (Vertice, Grafos, leitura de arquivo):
+ *   Reaproveitada das implementações anteriores pelo aluno Filipe Nery.
+ *
+ * Algoritmo Naïve de identificação de pontes:
+ *   Implementado com base na definição clássica: remove cada aresta e testa
+ *   conectividade via DFS. Complexidade O(E * (V+E)).
+ *
+ * Algoritmo de Tarjan (1974):
+ *   Implementado com base no artigo original:
+ *     Tarjan, R. E. (1974). A note on finding the bridges of a graph.
+ *     Information Processing Letters, 2(6), 160-161.
+ *     https://doi.org/10.1016/0020-0190(74)90003-9
+ *   A lógica central (low[], td[], propagação do low ao pai) é fiel ao artigo.
+ *
+ *   VARIANTE 1 — Tarjan com cache por passo (isPonte):
+ *   Executa o Tarjan completo (O(V+E)) uma única vez por passo do Fleury,
+ *   armazenando o resultado em um HashSet de pares codificados como long.
+ *   O cache é invalidado após cada remoção de aresta; consultas dentro do
+ *   mesmo passo respondem em O(1). Complexidade total do Fleury: O(E*(V+E)).
+ *   A ideia de recomputação preguiçosa é análoga ao padrão "lazy recomputation"
+ *   descrito em Skiena, S. (2008). The Algorithm Design Manual (2nd ed.), Springer.
+ *
+ *   VARIANTE 2 — Tarjan otimizado com DFS de alcançabilidade (isPonteOtimizado):
+ *   Para verificar se (u,v) é ponte no Fleury, substitui o Tarjan global por
+ *   uma DFS de alcançabilidade local: remove (u,v), verifica se v ainda é
+ *   alcançável a partir de u, restaura. O(V+E) por candidata, sem recomputar
+ *   arrays globais. Mantém o critério de ponte (desconexão do grafo) conceitualmente
+ *   fiel ao enunciado. A lógica do Tarjan (low[], td[]) é preservada intacta;
+ *   apenas o mecanismo de consulta no Fleury é substituído por DFS de alcance.
+ *
+ * Algoritmo de Fleury:
+ *   Inspirado na descrição canônica disponível em:
+ *   https://www.geeksforgeeks.org/dsa/fleurys-algorithm-for-printing-eulerian-path/
+ */
 
-*/
-
-class Vertice{
-    // 
+// ---------------------------------------------------------------------------
+// Vertice
+// ---------------------------------------------------------------------------
+class Vertice {
     public int vertice;
     public ArrayList<Integer> vizinhos;
-    public boolean visitado;
     public int grau;
 
-    Vertice(int num){
+    Vertice(int num) {
         this.vertice = num;
         this.vizinhos = new ArrayList<>();
         this.grau = 0;
-        this.visitado = false;
     }
 
-    public void inserir(int num){
-        //Função que insere o vertice na lista de vizinhos
+    public void inserir(int num) {
         this.vizinhos.add(num);
         this.grau++;
     }
 
-    public int contarVizinhos(){
-        return this.vizinhos.size();
+    public int contarVizinhos() { return this.vizinhos.size(); }
+
+    public ArrayList<Integer> getVizinhos() { return this.vizinhos; }
+
+    public void imprimir() {
+        System.out.println("\nVertice visualizado: " + vertice);
+        System.out.println("(i) Grau: " + contarVizinhos());
+        System.out.print("(ii) Conjunto de vizinhos: ");
+        for (int i : vizinhos) System.out.print(i + " ");
+        System.out.println();
     }
 
-    public ArrayList<Integer> getVizinhos(){
-        return this.vizinhos;
-    }
-
-    public void imprimir(){
-        System.out.println("\nVeritice visualizado: " + vertice);
-        System.out.println("(i)Grau de saída: " + contarVizinhos());
-        System.out.print("(iii) Conjunto de vizinhos: ");
-        for(int i: vizinhos){
-            System.out.print(i + " ");
-        }
-        System.out.println("");
-    }
-
-    public void ordenar(){
-        Collections.sort(vizinhos);
-    }
+    public void ordenar() { Collections.sort(vizinhos); }
 
     public void inserirOrdenado(int valor) {
-        // Encontra a posição correta para manter a lista ordenada
         int pos = 0;
-        while (pos < vizinhos.size() && vizinhos.get(pos) < valor) {
-            pos++;
-        }
+        while (pos < vizinhos.size() && vizinhos.get(pos) < valor) pos++;
         vizinhos.add(pos, valor);
         this.grau++;
     }
 
     public void remover(int valor) {
-       boolean removeu = vizinhos.remove(Integer.valueOf(valor));
-        if (removeu) {this.grau--; }
+        if (vizinhos.remove(Integer.valueOf(valor))) this.grau--;
     }
 }
 
+// ---------------------------------------------------------------------------
+// Grafos
+// ---------------------------------------------------------------------------
 class Grafos {
     static int vertice;
     static int arestas;
@@ -75,558 +94,628 @@ class Grafos {
     static int componentes;
 
     public static void lerGrafo(File arq) throws FileNotFoundException {
-        //Leitura do arquivo de grafos
-        
-        try (Scanner leitor = new Scanner(arq)) {
-           vertice = leitor.nextInt();
-           arestas = leitor.nextInt();
-           grafo = new Vertice[vertice + 1];
-           for(int i = 1; i <= vertice; i++){
-                grafo[i] = new Vertice(i);
+        try (Scanner leitor = new Scanner(new BufferedReader(new FileReader(arq)))) {
+            vertice = leitor.nextInt();
+            arestas = leitor.nextInt();
+            grafo   = new Vertice[vertice + 1];
+            for (int i = 1; i <= vertice; i++) grafo[i] = new Vertice(i);
+            for (int i = 0; i < arestas; i++) {
+                int u = leitor.nextInt(), v = leitor.nextInt();
+                grafo[u].inserir(v);
+                grafo[v].inserir(u);
             }
-
-            for(int i = 0; i < arestas; i++){
-                int pai = leitor.nextInt();
-                int filho = leitor.nextInt();
-                grafo[pai].inserir(filho);
-                grafo[filho].inserir(pai);
-            }
-            for(int i = 1; i <= vertice; i++){
-                grafo[i].ordenar();
-            }
+            for (int i = 1; i <= vertice; i++) grafo[i].ordenar();
         }
         componentes = 0;
     }
 
+    /** Cópia profunda do grafo — necessária para restaurar entre rodadas do batch. */
     public static Vertice[] clonarGrafo() {
-        Vertice[] novoGrafo = new Vertice[vertice + 1];
-        for(int i = 1; i <= vertice; i++){
-            novoGrafo[i] = new Vertice(i);
-            for(int v : grafo[i].getVizinhos()) {
-                novoGrafo[i].inserir(v);
-            }
+        Vertice[] c = new Vertice[vertice + 1];
+        for (int i = 1; i <= vertice; i++) {
+            c[i] = new Vertice(i);
+            for (int v : grafo[i].getVizinhos()) c[i].inserir(v);
         }
-        return novoGrafo;
+        return c;
     }
 
-    public static int menu(){
-        // Função responsavel por retornar qual aresta o usuario deseja visualizar as informações
-        Scanner ler = new Scanner(System.in);
-        System.out.printf("Qual vertice deseja visualizar(%d até %d): ", 1, vertice);
-        int resp = ler.nextInt();
-        return resp;
-    }
-
-    public static File solicitarArquivo() {
-        Scanner ler = new Scanner(System.in);
-        File arq = null;
-        
-        while(arq == null || !arq.exists()) {
-            System.out.print("Insira o nome do arquivo a ser lido (não inserir o .txt): ");
-            String nomeArq = ler.nextLine().trim() + ".txt";
-            arq = new File(nomeArq);
-            
-            if(!arq.exists()) {
-                System.out.println("\nErro: Arquivo '" + nomeArq + "' não encontrado!");
-                
-                // Lista arquivos .txt disponíveis no diretório
-                File diretorioAtual = new File(".");
-                File[] arquivosTxt = diretorioAtual.listFiles((dir, name) -> name.endsWith(".txt"));
-                
-                if(arquivosTxt != null && arquivosTxt.length > 0) {
-                    System.out.println("Arquivos .txt disponíveis no diretório:");
-                    for(File arquivo : arquivosTxt) {
-                        String nome = arquivo.getName();
-                        String nomeBase = nome.substring(0, nome.length() - 4); // Remove .txt
-                        System.out.println("   • " + nomeBase);
-                    }
-                } else {
-                    System.out.println("Nenhum arquivo .txt encontrado no diretório atual.");
-                }
-                
-                System.out.print("\nDeseja tentar novamente? (s/n): ");
-                String resposta = ler.nextLine().trim().toLowerCase();
-                if(!resposta.equals("s") && !resposta.equals("sim")) {
-                    System.out.println("Programa encerrado pelo usuário.");
-                    System.exit(0);
-                }
-                System.out.println(); // Linha em branco para legibilidade
-            }
+    /** Restaura o grafo principal a partir de um backup obtido via clonarGrafo(). */
+    public static void restaurarGrafo(Vertice[] backup) {
+        for (int i = 1; i <= vertice; i++) {
+            grafo[i].vizinhos = new ArrayList<>(backup[i].vizinhos);
+            grafo[i].grau     = backup[i].grau;
         }
-        return arq;
     }
 
-    public static void removerAresta(int u, int v){
-        // Grafo não direcionado: remove nos dois sentidos
+    public static void removerAresta(int u, int v) {
         grafo[u].remover(v);
         grafo[v].remover(u);
     }
 
-    public static void init(){
-        try {
-            File arq = solicitarArquivo();
-            
-            System.out.println("Carregando grafo...");
-            lerGrafo(arq);    
-            int visualizarVertice = menu();
-            if(visualizarVertice >= 1 && visualizarVertice <= vertice) {
-                grafo[visualizarVertice].imprimir();
-            } else {
-                System.out.println("Vértice inválido! Escolha entre 1 e " + vertice);
-            }
-        }
-        catch(FileNotFoundException e){
-            System.out.println("Erro: Arquivo não encontrado - " + e.getMessage());
-        }
-        catch(Exception e){
-            System.out.println("Erro inesperado: " + e.getMessage());
-            e.printStackTrace();
-        }
+    public static void restaurarAresta(int u, int v) {
+        grafo[u].inserirOrdenado(v);
+        grafo[v].inserirOrdenado(u);
     }
 
-    void dfsVerificaAlcanceDeVertice(int v, boolean[] visitado) {
-        visitado[v] = true;
-
-        for (int vizinho : Grafos.grafo[v].getVizinhos()) {
-            if (!visitado[vizinho]) {
-                dfsVerificaAlcanceDeVertice(vizinho, visitado);
+    public static File solicitarArquivo(Scanner in) {
+        File arq = null;
+        while (arq == null || !arq.exists()) {
+            System.out.print("Nome do arquivo (sem .txt): ");
+            String nome = in.nextLine().trim() + ".txt";
+            arq = new File(nome);
+            if (!arq.exists()) {
+                System.out.println("Arquivo '" + nome + "' não encontrado.");
+                File[] txts = new File(".").listFiles((d, n) -> n.endsWith(".txt"));
+                if (txts != null && txts.length > 0) {
+                    System.out.println("Disponíveis:");
+                    for (File f : txts)
+                        System.out.println("  " + f.getName().replace(".txt", ""));
+                }
+                System.out.print("Tentar novamente? (s/n): ");
+                String resp = in.nextLine().trim().toLowerCase();
+                if (!resp.equals("s") && !resp.equals("sim")) {
+                    System.out.println("Programa encerrado.");
+                    System.exit(0);
+                }
             }
         }
+        return arq;
     }
 }
 
-class Arestas{
-    String aresta;
-    String tipo;
-
-    public Arestas(Vertice v, Vertice w, String tipo){
-        this.aresta = v.vertice + ", " + w.vertice;
-        this.tipo = tipo;
-    }
-
-    public void imprimir(){
-        System.out.println("Aresta: " + aresta);
-        System.out.println("Classificação: " + tipo);
-
-    }
-}
-
+// ---------------------------------------------------------------------------
+// DFS utilitária
+// ---------------------------------------------------------------------------
 class DFS {
-    static int t;
-    static ArrayList<Arestas> arestas;
-    static int td[];
-    static int tt[];
-    static int pai[];
-    static int low[];
+    static int   t;
+    static int[] td;
+    static int[] tt;
+    static int[] pai;
+    static int[] low;
 
-    private static ArrayList<Integer> vizinhosDe(Vertice v){
-        return v.getVizinhos();
-    }
-
-    public static void imprimir(){
-        for(Arestas i: arestas){
-            i.imprimir();
-            System.out.println("");
-        }
-    }
-    public static void buscaProfundidade(Vertice v){
-        t = t+1;
-        td[v.vertice] = t;
-        for(int ws: vizinhosDe(v))
-        {
-            Vertice w = Grafos.grafo[ws];
-            if(w != null){
-                if(td[w.vertice] == 0){
-                    pai[w.vertice] = v.vertice;
-                    arestas.add(new Arestas(v, w, "árvore"));
-                    buscaProfundidade(w);
-                }
-                else{
-                    if(tt[w.vertice] == 0){
-                        arestas.add(new Arestas(v, w, "retorno"));
-                    }
-                    else if(td[v.vertice] < td[w.vertice]){
-                        arestas.add(new Arestas(v, w, "avanço"));
-                    }
-                    else{
-                        arestas.add(new Arestas(v, w, "cruzamento"));
-                    }
-                }
-            }
-        }
-        t += 1;
-        tt[v.vertice] = t;
-    }
-
-    public static void buscaProfundidadeTarjan(Vertice v, int p) {
-        t++;
-        td[v.vertice] = low[v.vertice] = t;
-        // Controla arestas paralelas de volta ao pai
-        int vezesVoltouAoPai = 0;
- 
-        for (int ws : v.getVizinhos()) {
-            Vertice w = Grafos.grafo[ws];
-            if (td[w.vertice] == 0) {
-                // Vizinho não visitado: aresta de árvore
-                pai[w.vertice] = v.vertice;
-                arestas.add(new Arestas(v, w, "árvore"));
-                buscaProfundidadeTarjan(w, v.vertice);
-                // Propaga o menor low do filho para o pai
-                low[v.vertice] = Math.min(low[v.vertice], low[w.vertice]);
-            } else if (ws == p) {
-                // É a aresta de volta ao pai — só ignora UMA vez (a da árvore)
-                // Se aparecer de novo (aresta paralela), trata como retorno normal
-                if (vezesVoltouAoPai == 0) {
-                    vezesVoltouAoPai++;
-                } else {
-                    low[v.vertice] = Math.min(low[v.vertice], td[w.vertice]);
-                }
-            } else {
-                // Vizinho já visitado que não é o pai: aresta de retorno
-                low[v.vertice] = Math.min(low[v.vertice], td[w.vertice]);
-                arestas.add(new Arestas(v, w, "retorno"));
-            }
-        }
-    }
-
-
+    /** DFS completa para contagem de componentes conexas. */
     public static void dfs() {
         t = 0;
         Grafos.componentes = 0;
-        // Inicializar arrays
         int tam = Grafos.vertice + 1;
-        td = new int[tam];
-        tt = new int[tam];
-        pai = new int[tam];
-        arestas = new ArrayList<>();
-        
-        for (Vertice v : Grafos.grafo) {
-            if(v != null){
-                td[v.vertice] = 0;
-                tt[v.vertice] = 0;
-                pai[v.vertice] = 0;
-            }
-        }
-        for(int i = 1; i <= Grafos.vertice; i++){
-            if(td[i] == 0){
-                buscaProfundidade(Grafos.grafo[i]);
-                Grafos.componentes += 1;
-            }
+        td = new int[tam]; tt = new int[tam]; pai = new int[tam];
+        for (int i = 1; i <= Grafos.vertice; i++)
+            if (td[i] == 0) { buscaProfundidade(i); Grafos.componentes++; }
+    }
+
+    private static void buscaProfundidade(int raiz) {
+        Deque<int[]> pilha = new ArrayDeque<>();
+        td[raiz] = ++t;
+        pilha.push(new int[]{raiz, 0});
+        while (!pilha.isEmpty()) {
+            int[] frame = pilha.peek();
+            int vId = frame[0];
+            ArrayList<Integer> viz = Grafos.grafo[vId].getVizinhos();
+            if (frame[1] < viz.size()) {
+                int ws = viz.get(frame[1]++);
+                if (td[ws] == 0) { pai[ws] = vId; td[ws] = ++t; pilha.push(new int[]{ws, 0}); }
+            } else { tt[vId] = ++t; pilha.pop(); }
         }
     }
 
-    public static void dfsComVerticeEspecifico(int op) {
-        t = 0;
-        Grafos.componentes = 0;
-        // Inicializar arrays
-        int tam = Grafos.vertice + 1;
-        td = new int[tam];
-        tt = new int[tam];
-        pai = new int[tam];
-        arestas = new ArrayList<>();
-        
-        for (Vertice v : Grafos.grafo) {
-            if(v != null){
-                td[v.vertice] = 0;
-                tt[v.vertice] = 0;
-                pai[v.vertice] = 0;
-            }
-        }
-        for(int i = 1; i <= Grafos.vertice; i++){
-            if(td[i] == 0){
-                buscaProfundidade(Grafos.grafo[i]);
-                Grafos.componentes += 1;
-            }
+    /**
+     * DFS de alcançabilidade a partir de 'raiz'.
+     * Preenche visitado[] com todos os vértices alcançáveis no grafo atual.
+     */
+    public static void dfsAlcance(int raiz, boolean[] visitado) {
+        Deque<Integer> pilha = new ArrayDeque<>();
+        pilha.push(raiz);
+        while (!pilha.isEmpty()) {
+            int u = pilha.pop();
+            if (visitado[u]) continue;
+            visitado[u] = true;
+            for (int viz : Grafos.grafo[u].getVizinhos())
+                if (!visitado[viz]) pilha.push(viz);
         }
     }
 
-    public static void teste() {
-        try {
-            File arq = Grafos.solicitarArquivo();
-            Grafos.lerGrafo(arq);
-            int op = Grafos.menu();
-            dfsComVerticeEspecifico(op);
-            imprimir();
-        } catch (FileNotFoundException e) {
-            System.out.println("Erro: Arquivo nao encontrado - " + e.getMessage());
+    /**
+     * DFS de Tarjan iterativa — calcula low[] e td[].
+     * frame: [vId, paiId, índiceVizinho, contadorRetornoAoPai]
+     * O contadorRetornoAoPai trata arestas paralelas: a primeira volta ao pai
+     * é ignorada (aresta de árvore); as demais atualizam low normalmente.
+     */
+    public static void buscaProfundidadeTarjan(int raiz, int paiRaiz) {
+        Deque<int[]> pilha = new ArrayDeque<>();
+        td[raiz] = low[raiz] = ++t;
+        pilha.push(new int[]{raiz, paiRaiz, 0, 0});
+        while (!pilha.isEmpty()) {
+            int[] frame = pilha.peek();
+            int vId = frame[0], pId = frame[1];
+            ArrayList<Integer> viz = Grafos.grafo[vId].getVizinhos();
+            if (frame[2] < viz.size()) {
+                int ws = viz.get(frame[2]++);
+                if (td[ws] == 0) {
+                    pai[ws] = vId; td[ws] = low[ws] = ++t;
+                    pilha.push(new int[]{ws, vId, 0, 0});
+                } else if (ws == pId) {
+                    if (frame[3] == 0) frame[3]++;
+                    else low[vId] = Math.min(low[vId], td[ws]);
+                } else {
+                    low[vId] = Math.min(low[vId], td[ws]);
+                }
+            } else {
+                pilha.pop();
+                if (!pilha.isEmpty())
+                    low[pilha.peek()[0]] = Math.min(low[pilha.peek()[0]], low[vId]);
+            }
         }
     }
 }
 
-class naive {
-    // Classe auxiliar do algoritmo ingênuo
+// ---------------------------------------------------------------------------
+// Naive — identificação de pontes por remoção e teste de conectividade
+// ---------------------------------------------------------------------------
+class Naive {
     public static ArrayList<String> pontes = new ArrayList<>();
 
-    public static void cortar(int u, int v){
-        Grafos.removerAresta(u, v);
-    }
-    
-
-    public static void restaurar(int u, int v){
-        //Função que restaura a aresta entre os vértices u e v  
-        Grafos.grafo[u].inserirOrdenado(v);
-        Grafos.grafo[v].inserirOrdenado(u);
-    }
-
-    public static void naive(){
+    /** Lista todas as pontes do grafo via força bruta. */
+    public static void naive() {
         pontes.clear();
         DFS.dfs();
-        int componentesOriginal = Grafos.componentes;
- 
-        for(int i = 1; i <= Grafos.vertice; i++){
-            // Copia a lista para não iterar sobre a lista que será modificada
-            ArrayList<Integer> vizinhos = new ArrayList<>(Grafos.grafo[i].getVizinhos());
-            
-            for(int j : vizinhos){
-                // Evita checar a mesma aresta duas vezes (i-j e j-i)
-                if(j <= i) continue;
- 
-                cortar(i, j);
+        int orig = Grafos.componentes;
+        for (int i = 1; i <= Grafos.vertice; i++) {
+            ArrayList<Integer> viz = new ArrayList<>(Grafos.grafo[i].getVizinhos());
+            for (int j : viz) {
+                if (j <= i) continue;
+                Grafos.removerAresta(i, j);
                 DFS.dfs();
- 
-                if(Grafos.componentes > componentesOriginal){
-                    pontes.add(i + " - " + j);
-                }
- 
-                restaurar(i, j);
-            }      
+                if (Grafos.componentes > orig) pontes.add(i + " - " + j);
+                Grafos.restaurarAresta(i, j);
+            }
         }
     }
 
-    public void imprimirPontes() {
-        if (pontes.isEmpty()) {
-            System.out.println("Nenhuma ponte encontrada.");
-        } else {
-            for (String ponte : pontes) {
-                System.out.println("Aresta " + ponte + " é uma ponte!");
-            } naive.naive();
-            System.out.println("Total: " + pontes.size() + " ponte(s)");
-        }
-    }
-
-    // Verifica se uma aresta específica é ponte usando o algoritmo naive
+    /**
+     * Verifica se (u,v) é ponte: remove, testa conectividade via DFS, restaura.
+     * Semântica do enunciado preservada. Complexidade: O(V+E) por chamada.
+     */
     public static boolean isPonte(int u, int v) {
         DFS.dfs();
-        int componentesOriginal = Grafos.componentes;
-        
-        cortar(u, v);
+        int orig = Grafos.componentes;
+        Grafos.removerAresta(u, v);
         DFS.dfs();
-        boolean ehPonte = Grafos.componentes > componentesOriginal;
-        restaurar(u, v);
-        
+        boolean ehPonte = Grafos.componentes > orig;
+        Grafos.restaurarAresta(u, v);
         return ehPonte;
     }
-
 }
 
+// ---------------------------------------------------------------------------
+// Tarjan — identificação de pontes via low[]
+// ---------------------------------------------------------------------------
 class Tarjan {
-    // Classe auxiliar do algoritmo de Tarjan
     public static ArrayList<String> pontes = new ArrayList<>();
- 
+
+    // Cache de pontes — Variante 1 (cache por passo no Fleury)
+    private static Set<Long> pontesCache = new HashSet<>();
+    private static boolean   cacheValido = false;
+
+    public static void invalidarCache() { cacheValido = false; }
+
+    private static long chave(int a, int b) {
+        if (a > b) { int t = a; a = b; b = t; }
+        return ((long) a << 32) | (b & 0xFFFFFFFFL);
+    }
+
+    /** Executa Tarjan completo e popula Tarjan.pontes. */
     public static void tarjan() {
         pontes.clear();
-        // Inicializar arrays zerados
-        DFS.td = new int[Grafos.vertice + 1];
-        DFS.low = new int[Grafos.vertice + 1];
-        DFS.pai = new int[Grafos.vertice + 1];
-        DFS.t = 0;
-        DFS.arestas = new ArrayList<>();
-
-        // Executar a busca em profundidade de Tarjan
-        for (int i = 1; i <= Grafos.vertice; i++) {
-            if (DFS.td[i] == 0) {
-                DFS.buscaProfundidadeTarjan(Grafos.grafo[i], -1);
-            }
-        }
-
-        // Verifica as pontes usando os resultados da DFS de Tarjan
+        int tam = Grafos.vertice + 1;
+        DFS.td = new int[tam]; DFS.low = new int[tam];
+        DFS.pai = new int[tam]; DFS.t = 0;
+        for (int i = 1; i <= Grafos.vertice; i++)
+            if (DFS.td[i] == 0) DFS.buscaProfundidadeTarjan(i, -1);
         for (int i = 1; i <= Grafos.vertice; i++) {
             int p = DFS.pai[i];
-            if (p != 0) { // Se o vértice 'i' tem um pai na árvore
-                // A condição clássica: low[filho] > discovery[pai]
-                if (DFS.low[i] > DFS.td[p]) {
-                    pontes.add(p + " - " + i);
-                }
-            }
+            if (p != 0 && DFS.low[i] > DFS.td[p]) pontes.add(p + " - " + i);
         }
+    }
+
+    private static void reconstruirCache() {
+        pontesCache.clear();
+        int tam = Grafos.vertice + 1;
+        DFS.td = new int[tam]; DFS.low = new int[tam];
+        DFS.pai = new int[tam]; DFS.t = 0;
+        for (int i = 1; i <= Grafos.vertice; i++)
+            if (DFS.td[i] == 0) DFS.buscaProfundidadeTarjan(i, -1);
+        for (int i = 1; i <= Grafos.vertice; i++) {
+            int p = DFS.pai[i];
+            if (p != 0 && DFS.low[i] > DFS.td[p]) pontesCache.add(chave(p, i));
+        }
+        cacheValido = true;
+    }
+
+    /**
+     * Variante 1 — cache por passo:
+     * Tarjan reexecutado apenas quando o cache está inválido (após remoção de aresta).
+     * Custo: O(V+E) uma vez por passo do Fleury; consultas subsequentes em O(1).
+     */
+    public static boolean isPonte(int u, int v) {
+        if (!cacheValido) reconstruirCache();
+        return pontesCache.contains(chave(u, v));
+    }
+
+    /**
+     * Variante 2 — DFS de alcançabilidade local:
+     * Remove (u,v), verifica alcançabilidade de v a partir de u, restaura.
+     * Equivalente ao critério low[v] > td[u] do Tarjan para grafos simples.
+     * Evita recomputar arrays globais; O(V+E) por candidata.
+     */
+    public static boolean isPonteOtimizado(int u, int v) {
+        if (Grafos.grafo[u].vizinhos.size() == 1) return true;
+        Grafos.removerAresta(u, v);
+        boolean[] visitado = new boolean[Grafos.vertice + 1];
+        DFS.dfsAlcance(u, visitado);
+        boolean ehPonte = !visitado[v];
+        Grafos.restaurarAresta(u, v);
+        return ehPonte;
     }
 
     public void imprimirPontes() {
         if (pontes.isEmpty()) {
             System.out.println("Nenhuma ponte encontrada.");
         } else {
-            for (String ponte : pontes) {
-                System.out.println("Aresta " + ponte + " é uma ponte!");
-            }
+            for (String p : pontes) System.out.println("Aresta " + p + " e uma ponte.");
             System.out.println("Total: " + pontes.size() + " ponte(s)");
         }
     }
-
-    // Verifica se uma aresta específica é ponte usando o algoritmo de Tarjan
-    public static boolean isPonte(int u, int v) {
-        // Faz uma cópia do grafo para não interferir com a execução
-        Vertice[] grafoOriginal = Grafos.grafo;
-        Grafos.grafo = Grafos.clonarGrafo();
-        
-        // Executa Tarjan
-        tarjan();
-        
-        // Verifica se a aresta (u,v) está nas pontes encontradas
-        boolean ehPonte = false;
-        for (String ponte : pontes) {
-            String[] partes = ponte.split(" - ");
-            int a = Integer.parseInt(partes[0]);
-            int b = Integer.parseInt(partes[1]);
-            if ((a == u && b == v) || (a == v && b == u)) {
-                ehPonte = true;
-                break;
-            }
-        }
-        
-        // Restaura o grafo original
-        Grafos.grafo = grafoOriginal;
-        return ehPonte;
-    }
 }
 
+// ---------------------------------------------------------------------------
+// CaminhoEuleriano — algoritmo de Fleury (três variantes de isPonte)
+// ---------------------------------------------------------------------------
 class CaminhoEuleriano {
+
+    public enum Modo { NAIVE, TARJAN_ORIGINAL, TARJAN_OTIMIZADO }
+
     public static List<int[]> arestas;
-    public static String algoritmoUsado = "naive"; // naive ou tarjan
-    
-    // Define qual algoritmo será usado para detectar pontes
-    public static void setAlgoritmo(String algoritmo) {
-        if (algoritmo.equalsIgnoreCase("naive") || algoritmo.equalsIgnoreCase("tarjan")) {
-            algoritmoUsado = algoritmo.toLowerCase();
-            System.out.println("Algoritmo de detecção de pontes: " + algoritmoUsado);
-        } else {
-            System.out.println("Algoritmo inválido! Use 'naive' ou 'tarjan'");
-        }
-    }
-    
-    static void contaVizinhos(int u, boolean[] visitado) {
-        visitado[u] = true;
-        for (int vizinho : Grafos.grafo[u].getVizinhos()) {
-            if (!visitado[vizinho]) {
-                contaVizinhos(vizinho, visitado);
-            }
-        }
-    }
 
-    // Verifica se a próxima aresta é válida (não é uma ponte)
-    // usa o algoritmo definido em algoritmoUsado
-    static boolean proximaArestaEValida(int u, int v) {
-
-        if (Grafos.grafo[u].vizinhos.size() == 1) {
-            return true;
-        }
-
-        boolean ehPonte;
-        
-        if (algoritmoUsado.equalsIgnoreCase("tarjan")) {
-            ehPonte = Tarjan.isPonte(u, v);
-        } else {
-            ehPonte = naive.isPonte(u, v);
-        }
-        
-        // Se for ponte, não é válida. Se não for, é válida.
-        return !ehPonte;
-    }
-
-    static void pegarCaminho(int u, int v) {
-
-        for (int i = 0; i < Grafos.grafo[u].vizinhos.size(); ++i) {
-            int proximo = Grafos.grafo[u].vizinhos.get(i);
-            if (proximaArestaEValida(u, proximo)) {
-                arestas.add(new int[]{u, proximo});
-                Grafos.removerAresta(u, proximo);
-                pegarCaminho(proximo, v);
-                break;
-            }
-        }
-    }
-
-    //retorna se o grafo é euleriano, semi, ou não
+    /** Classifica o grafo: "euleriano", "semieuleriano" ou "naoeuleriano". */
     public static String classificar() {
-        boolean[] visitado = new boolean[Grafos.vertice + 1];
         int inicio = -1;
-        for (int i = 1; i <= Grafos.vertice; i++) {
+        for (int i = 1; i <= Grafos.vertice; i++)
             if (Grafos.grafo[i].grau > 0) { inicio = i; break; }
-        }
         if (inicio == -1) return "naoeuleriano";
-        contaVizinhos(inicio, visitado);
-        for (int i = 1; i <= Grafos.vertice; i++) {
-            if (Grafos.grafo[i].grau > 0 && !visitado[i]) return "naoeuleriano";
-        }
+
+        boolean[] vis = new boolean[Grafos.vertice + 1];
+        DFS.dfsAlcance(inicio, vis);
+        for (int i = 1; i <= Grafos.vertice; i++)
+            if (Grafos.grafo[i].grau > 0 && !vis[i]) return "naoeuleriano";
+
         int impares = 0;
-        for (int i = 1; i <= Grafos.vertice; i++) {
+        for (int i = 1; i <= Grafos.vertice; i++)
             if (Grafos.grafo[i].grau % 2 != 0) impares++;
-        }
         if (impares == 0) return "euleriano";
         if (impares == 2) return "semieuleriano";
         return "naoeuleriano";
     }
-    
-    static List<int[]> pegarCaminhoEuleriano(int v) {
-        int inicio = 1;
 
-        // Procura um vertice de grau ímpar para começar, se existir
-        boolean temGrauImpar = false;
-        int i = 1;
-        while (i <= v && !temGrauImpar) {
-            if (Grafos.grafo[i].grau % 2 != 0) {
-                inicio = i;
-                temGrauImpar = true;
-
-            }
-            i++;
+    private static boolean arestaValida(int atual, int prox, Modo modo) {
+        if (Grafos.grafo[atual].vizinhos.size() == 1) return true;
+        switch (modo) {
+            case NAIVE:            return !Naive.isPonte(atual, prox);
+            case TARJAN_ORIGINAL:  return !Tarjan.isPonte(atual, prox);
+            case TARJAN_OTIMIZADO: return !Tarjan.isPonteOtimizado(atual, prox);
+            default: return false;
         }
+    }
 
+    private static void percorrer(int inicio, Modo modo) {
+        int atual = inicio;
+        while (!Grafos.grafo[atual].vizinhos.isEmpty()) {
+            // Snapshot da lista para evitar ConcurrentModificationException
+            int[] candidatos = Grafos.grafo[atual].vizinhos.stream()
+                    .mapToInt(Integer::intValue).toArray();
+            int escolhido = -1;
+            for (int c : candidatos) {
+                if (!Grafos.grafo[atual].vizinhos.contains(c)) continue;
+                if (arestaValida(atual, c, modo)) { escolhido = c; break; }
+            }
+            if (escolhido == -1) break;
+            arestas.add(new int[]{atual, escolhido});
+            Grafos.removerAresta(atual, escolhido);
+            if (modo == Modo.TARJAN_ORIGINAL) Tarjan.invalidarCache();
+            atual = escolhido;
+        }
+    }
+
+    /**
+     * Executa Fleury com o modo especificado.
+     * Retorna lista vazia se o grafo não admite caminho euleriano.
+     */
+    public static List<int[]> executar(Modo modo) {
         arestas = new ArrayList<>();
-        pegarCaminho(inicio, v);
+        if (classificar().equals("naoeuleriano")) return arestas;
+
+        int inicio = -1;
+        for (int i = 1; i <= Grafos.vertice; i++) {
+            if (Grafos.grafo[i].grau > 0) {
+                if (inicio == -1) inicio = i;
+                if (Grafos.grafo[i].grau % 2 != 0) { inicio = i; break; }
+            }
+        }
+        if (modo == Modo.TARJAN_ORIGINAL) Tarjan.invalidarCache();
+        percorrer(inicio, modo);
         return arestas;
     }
-    
 }
 
-public class Main {
+// ---------------------------------------------------------------------------
+// Experimento — execução em batch com medição de tempo e barra de progresso
+// ---------------------------------------------------------------------------
+class Experimento {
 
-    public static int menu() {
-        System.out.println("Escolha o algoritmo para detecção de pontes:");
-        System.out.println("1. Ingênuo");
-        System.out.println("2. Tarjan");
-        System.out.print("Opção: ");
-        Scanner scanner = new Scanner(System.in);
-        return scanner.nextInt();
+    private static final long LIMITE_NS = 60L * 1_000_000_000L;
+
+    private static final String[] NOMES = {
+        "naive-fleury",
+        "tarjan-fleury-original",
+        "tarjan-fleury-otimizado"
+    };
+
+    private static final CaminhoEuleriano.Modo[] MODOS = {
+        CaminhoEuleriano.Modo.NAIVE,
+        CaminhoEuleriano.Modo.TARJAN_ORIGINAL,
+        CaminhoEuleriano.Modo.TARJAN_OTIMIZADO
+    };
+
+    private static final int LARGURA_BARRA = 40;
+
+    /**
+     * Imprime (ou atualiza no lugar) a barra de progresso.
+     * Usa \r para sobrescrever a linha atual — funciona em terminais ANSI.
+     *
+     * Formato:
+     *   [████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░]  42%  |  1/5 rodadas  |  naive-fleury (2/3)
+     *
+     * execTotal  : total de execuções individuais (MODOS.length * rodadas)
+     * execFeitas : quantas já concluíram
+     * rodadaAtual: índice da rodada global completa (todas 3 feitas) — para "X/N rodadas"
+     * rodadas    : total de rodadas pedidas
+     * nomeAlg    : algoritmo em execução agora
+     * rodAlg     : rodada atual deste algoritmo
+     * totalAlg   : total de rodadas deste algoritmo
+     */
+    private static void imprimirBarra(int execTotal, int execFeitas,
+                                      int rodadaCompleta, int rodadas,
+                                      String nomeAlg, int rodAlg, int totalAlg) {
+        int preenchido = (execTotal == 0) ? 0 : (execFeitas * LARGURA_BARRA) / execTotal;
+        int vazio      = LARGURA_BARRA - preenchido;
+        int pct        = (execTotal == 0) ? 0 : (execFeitas * 100) / execTotal;
+
+        StringBuilder barra = new StringBuilder("[");
+        for (int i = 0; i < preenchido; i++) barra.append('\u2588'); // bloco cheio
+        for (int i = 0; i < vazio;      i++) barra.append('\u2591'); // bloco vazio
+        barra.append("]");
+
+        String linha = String.format("\r%s %3d%%  |  %d/%d rodadas  |  %s (%d/%d)",
+                barra, pct, rodadaCompleta, rodadas, nomeAlg, rodAlg, totalAlg);
+
+        System.out.print(linha);
+        System.out.flush();
     }
 
-    public static void main(String[] args) throws FileNotFoundException {
-        // Inicia cronômetro
-        long tempoInicio = System.nanoTime();
-        
-        Grafos.lerGrafo(new File("grafos100euleriano/grafo1/grafo.txt"));
-        
-        // Define qual algoritmo usar: "naive" ou "tarjan"
-        int opcao = menu();
-        if (opcao == 1) {
-            CaminhoEuleriano.setAlgoritmo("naive");
-        } else {
-            CaminhoEuleriano.setAlgoritmo("tarjan");
+    /**
+     * Roda cada algoritmo 'rodadas' vezes.
+     * Exibe barra de progresso em tempo real durante a execução.
+     * Clona o grafo antes de cada rodada (Fleury consome arestas) e restaura depois.
+     * Resultados gravados em tempos.txt.
+     */
+    public static void rodar(int rodadas, File arqGrafo) {
+        int totalExec = MODOS.length * rodadas; // total de execuções individuais
+        int execFeitas = 0;
+        int rodadaCompleta = 0; // quantas rodadas "completas" (todos algoritmos executaram 1x)
+
+        System.out.println("Iniciando batch: " + rodadas
+                + " rodada(s) x " + MODOS.length + " algoritmos"
+                + " = " + totalExec + " execucoes no total.");
+        System.out.println();
+
+        List<String> linhas = new ArrayList<>();
+        linhas.add("Arquivo : " + arqGrafo.getName());
+        linhas.add("Vertices: " + Grafos.vertice);
+        linhas.add("Arestas : " + Grafos.arestas);
+        linhas.add("Rodadas : " + rodadas);
+        linhas.add("Limite  : 60 s por rodada");
+        linhas.add("-------------------------------------------------------------------");
+        linhas.add(String.format("%-28s  %6s  %14s  %14s  %s",
+                "algoritmo", "rodada", "tempo_ms", "tempo_s", "status"));
+        linhas.add("-------------------------------------------------------------------");
+
+        // Exibe barra inicial (0%)
+        imprimirBarra(totalExec, 0, 0, rodadas, NOMES[0], 0, rodadas);
+
+        // Buffer de tempos por algoritmo para calcular média ao final
+        double[][] temposMs = new double[MODOS.length][rodadas];
+        int[]      contagem = new int[MODOS.length];
+        boolean[]  inviavel = new boolean[MODOS.length];
+
+        for (int r = 1; r <= rodadas; r++) {
+            for (int a = 0; a < MODOS.length; a++) {
+                if (inviavel[a]) {
+                    // Algoritmo já marcado como inviável — registra e conta como feito
+                    execFeitas++;
+                    // Atualiza barra antes de pular (mostra que avançou)
+                    int rc = (execFeitas / MODOS.length); // rodadas completas estimadas
+                    imprimirBarra(totalExec, execFeitas, rc, rodadas,
+                            NOMES[a] + " [PULADO]", r, rodadas);
+                    continue;
+                }
+
+                // Atualiza barra mostrando o que está prestes a executar
+                imprimirBarra(totalExec, execFeitas, rodadaCompleta, rodadas,
+                        NOMES[a], r, rodadas);
+
+                Vertice[] backup = Grafos.clonarGrafo();
+
+                long ini = System.nanoTime();
+                CaminhoEuleriano.executar(MODOS[a]);
+                long fim = System.nanoTime();
+                long durNs = fim - ini;
+
+                Grafos.restaurarGrafo(backup);
+                execFeitas++;
+
+                double durMs = durNs / 1_000_000.0;
+                double durS  = durNs / 1_000_000_000.0;
+                String status;
+
+                if (durNs > LIMITE_NS) {
+                    status = "INVIAVEL (>60s)";
+                    inviavel[a] = true;
+                } else {
+                    status = "ok";
+                    temposMs[a][contagem[a]] = durMs;
+                    contagem[a]++;
+                }
+
+                linhas.add(String.format("%-28s  %6d  %14.3f  %14.6f  %s",
+                        NOMES[a], r, durMs, durS, status));
+
+                if (inviavel[a] && r < rodadas) {
+                    linhas.add(String.format("%-28s  %6s  %14s  %14s  %s",
+                            NOMES[a], (r + 1) + ".." + rodadas, "-", "-",
+                            "PULADO (limite excedido na rodada " + r + ")"));
+                }
+            }
+
+            // Rodada r concluída para todos os algoritmos
+            rodadaCompleta = r;
+            imprimirBarra(totalExec, execFeitas, rodadaCompleta, rodadas,
+                    (rodadaCompleta < rodadas) ? NOMES[0] : "concluido", rodadaCompleta, rodadas);
         }
 
-        List <int[]> caminhoEuleriano = CaminhoEuleriano.pegarCaminhoEuleriano(Grafos.vertice);
-        for(int i = 0; i < caminhoEuleriano.size(); i++){
-            System.out.print(caminhoEuleriano.get(i)[0] + "-" + caminhoEuleriano.get(i)[1]);
-            if (i != caminhoEuleriano.size() - 1) {
-                System.out.print(", ");
+        // Quebra de linha após a barra
+        System.out.println();
+        System.out.println();
+
+        // Adiciona médias ao arquivo
+        linhas.add("-------------------------------------------------------------------");
+        for (int a = 0; a < MODOS.length; a++) {
+            linhas.add("");
+            if (contagem[a] > 0) {
+                double soma = 0;
+                for (int k = 0; k < contagem[a]; k++) soma += temposMs[a][k];
+                double media = soma / contagem[a];
+                linhas.add(String.format("%-28s  %6s  %14.3f  %14.6f  %s",
+                        NOMES[a] + " [MEDIA]", "-", media, media / 1000.0, "-"));
+            } else {
+                linhas.add(String.format("%-28s  %6s  %14s  %14s  %s",
+                        NOMES[a] + " [MEDIA]", "-", "-", "-", "todas inviáveis"));
             }
         }
-        
-        // Calcula tempo de execução
-        long tempoFim = System.nanoTime();
-        long tempoExecucao = tempoFim - tempoInicio;
-        
-        System.out.println("\n\n=== ESTATÍSTICAS ===");
-        System.out.println("Tempo de execução: " + (tempoExecucao / 1_000_000.0) + " ms");
+
+        // Grava tempos.txt
+        try (PrintWriter pw = new PrintWriter(new BufferedWriter(new FileWriter("tempos.txt")))) {
+            for (String l : linhas) pw.println(l);
+            System.out.println("Resultados gravados em: "
+                    + new File("tempos.txt").getAbsolutePath());
+        } catch (IOException e) {
+            System.out.println("Erro ao gravar tempos.txt: " + e.getMessage());
+        }
     }
 }
 
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+public class Main {
+
+    private static final Scanner in = new Scanner(System.in);
+
+    public static void main(String[] args) {
+
+        // 1. Solicita e carrega o arquivo
+        File arq = Grafos.solicitarArquivo(in);
+        try {
+            Grafos.lerGrafo(arq);
+        } catch (FileNotFoundException e) {
+            System.out.println("Erro ao ler arquivo: " + e.getMessage());
+            return;
+        }
+        System.out.println("Grafo carregado: " + Grafos.vertice
+                + " vertices, " + Grafos.arestas + " arestas.");
+
+        // 2. Modo de execução
+        System.out.print("Executar teste em batch (todos os algoritmos N vezes)? (s/n): ");
+        String resp = in.nextLine().trim().toLowerCase();
+
+        if (resp.equals("s") || resp.equals("sim")) {
+            modoBatch(arq);
+        } else {
+            modoIndividual();
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    private static void modoBatch(File arqGrafo) {
+        System.out.print("Numero de rodadas por algoritmo: ");
+        int rodadas = lerInt();
+        if (rodadas < 1) { System.out.println("Numero invalido."); return; }
+        Experimento.rodar(rodadas, arqGrafo);
+    }
+
+    // -----------------------------------------------------------------------
+    private static void modoIndividual() {
+        System.out.println("Escolha o algoritmo:");
+        System.out.println("  1. Naive");
+        System.out.println("  2. Tarjan original (cache por passo)");
+        System.out.println("  3. Tarjan otimizado (DFS de alcancabilidade)");
+        System.out.print("Opcao: ");
+        int opcao = lerInt();
+
+        CaminhoEuleriano.Modo modo;
+        String nomeAlg;
+        switch (opcao) {
+            case 1: modo = CaminhoEuleriano.Modo.NAIVE;
+                    nomeAlg = "naive"; break;
+            case 2: modo = CaminhoEuleriano.Modo.TARJAN_ORIGINAL;
+                    nomeAlg = "tarjan-original"; break;
+            case 3: modo = CaminhoEuleriano.Modo.TARJAN_OTIMIZADO;
+                    nomeAlg = "tarjan-otimizado"; break;
+            default: System.out.println("Opcao invalida."); return;
+        }
+
+        Vertice[] backup = Grafos.clonarGrafo();
+
+        long ini = System.nanoTime();
+        List<int[]> caminho = CaminhoEuleriano.executar(modo);
+        long fim = System.nanoTime();
+        long durNs = fim - ini;
+
+        Grafos.restaurarGrafo(backup);
+
+        // Imprime caminho no terminal
+        if (caminho.isEmpty()) {
+            System.out.println("O grafo nao possui caminho euleriano.");
+        } else {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < caminho.size(); i++) {
+                sb.append(caminho.get(i)[0]).append("-").append(caminho.get(i)[1]);
+                if (i < caminho.size() - 1) sb.append(", ");
+            }
+            System.out.println(sb);
+        }
+
+        // Estatísticas no terminal
+        System.out.println("\n=== ESTATISTICAS ===");
+        System.out.println("Vertices : " + Grafos.vertice);
+        System.out.println("Arestas  : " + Grafos.arestas);
+        System.out.println("Algoritmo: " + nomeAlg);
+        System.out.printf( "Tempo    : %.3f ms%n",  durNs / 1_000_000.0);
+        System.out.printf( "Tempo    : %.6f s%n",   durNs / 1_000_000_000.0);
+        if (durNs > 60L * 1_000_000_000L)
+            System.out.println("AVISO: tempo excedeu 60 s — algoritmo inviavel para este grafo.");
+    }
+
+    private static int lerInt() {
+        try { return Integer.parseInt(in.nextLine().trim()); }
+        catch (NumberFormatException e) { return -1; }
+    }
+}
