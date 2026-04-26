@@ -1,5 +1,6 @@
 import java.io.*;
 import java.util.*;
+import java.util.concurrent.*;
 
 /*
  * ORIGENS E ATRIBUIÇÕES
@@ -376,6 +377,13 @@ class CaminhoEuleriano {
 
     public static List<int[]> arestas;
 
+    /**
+     * Flag de cancelamento — setada pela thread de timeout do Experimento.
+     * O loop do percorrer verifica esta flag a cada passo e para imediatamente
+     * se ela estiver ativa, permitindo que o timeout seja efetivo.
+     */
+    static volatile boolean cancelado = false;
+
     /** Classifica o grafo: "euleriano", "semieuleriano" ou "naoeuleriano". */
     public static String classificar() {
         int inicio = -1;
@@ -408,12 +416,13 @@ class CaminhoEuleriano {
 
     private static void percorrer(int inicio, Modo modo) {
         int atual = inicio;
-        while (!Grafos.grafo[atual].vizinhos.isEmpty()) {
-            // Snapshot da lista para evitar ConcurrentModificationException
+        // Verifica cancelado a cada passo — permite interrupção por timeout
+        while (!cancelado && !Grafos.grafo[atual].vizinhos.isEmpty()) {
             int[] candidatos = Grafos.grafo[atual].vizinhos.stream()
                     .mapToInt(Integer::intValue).toArray();
             int escolhido = -1;
             for (int c : candidatos) {
+                if (cancelado) return;
                 if (!Grafos.grafo[atual].vizinhos.contains(c)) continue;
                 if (arestaValida(atual, c, modo)) { escolhido = c; break; }
             }
@@ -427,7 +436,7 @@ class CaminhoEuleriano {
 
     /**
      * Executa Fleury com o modo especificado.
-     * Retorna lista vazia se o grafo não admite caminho euleriano.
+     * Retorna lista vazia se o grafo não admite caminho euleriano ou foi cancelado.
      */
     public static List<int[]> executar(Modo modo) {
         arestas = new ArrayList<>();
@@ -451,7 +460,7 @@ class CaminhoEuleriano {
 // ---------------------------------------------------------------------------
 class Experimento {
 
-    private static final long LIMITE_NS = 60L * 1_000_000_000L;
+    private static final long LIMITE_NS = 4L * 1_000_000_000L;
 
     private static final String[] NOMES = {
         "naive-fleury",
@@ -502,15 +511,22 @@ class Experimento {
     }
 
     /**
-     * Roda cada algoritmo 'rodadas' vezes.
-     * Exibe barra de progresso em tempo real durante a execução.
-     * Clona o grafo antes de cada rodada (Fleury consome arestas) e restaura depois.
+     * Roda cada algoritmo 'rodadas' vezes com timeout real de 60s por execução.
+     *
+     * Mecanismo de timeout:
+     *   O Fleury é submetido a um ExecutorService de thread única.
+     *   Se não concluir em 60s, o Future é cancelado e a flag
+     *   CaminhoEuleriano.cancelado é setada — o loop do percorrer para
+     *   na próxima verificação da flag. O grafo é restaurado antes da
+     *   próxima rodada independentemente do resultado.
+     *
+     * Exibe barra de progresso em tempo real.
      * Resultados gravados em tempos.txt.
      */
     public static void rodar(int rodadas, File arqGrafo) {
-        int totalExec = MODOS.length * rodadas; // total de execuções individuais
-        int execFeitas = 0;
-        int rodadaCompleta = 0; // quantas rodadas "completas" (todos algoritmos executaram 1x)
+        int totalExec      = MODOS.length * rodadas;
+        int execFeitas     = 0;
+        int rodadaCompleta = 0;
 
         System.out.println("Iniciando batch: " + rodadas
                 + " rodada(s) x " + MODOS.length + " algoritmos"
@@ -522,43 +538,65 @@ class Experimento {
         linhas.add("Vertices: " + Grafos.vertice);
         linhas.add("Arestas : " + Grafos.arestas);
         linhas.add("Rodadas : " + rodadas);
-        linhas.add("Limite  : 60 s por rodada");
+        linhas.add("Limite  : 60 s por execucao");
         linhas.add("-------------------------------------------------------------------");
         linhas.add(String.format("%-28s  %6s  %14s  %14s  %s",
                 "algoritmo", "rodada", "tempo_ms", "tempo_s", "status"));
         linhas.add("-------------------------------------------------------------------");
 
-        // Exibe barra inicial (0%)
         imprimirBarra(totalExec, 0, 0, rodadas, NOMES[0], 0, rodadas);
 
-        // Buffer de tempos por algoritmo para calcular média ao final
         double[][] temposMs = new double[MODOS.length][rodadas];
         int[]      contagem = new int[MODOS.length];
         boolean[]  inviavel = new boolean[MODOS.length];
 
+        // Thread única para rodar o Fleury — permite interrupção via Future.cancel()
+        ExecutorService exec = Executors.newSingleThreadExecutor();
+
         for (int r = 1; r <= rodadas; r++) {
             for (int a = 0; a < MODOS.length; a++) {
+                final int algIdx = a;
+
                 if (inviavel[a]) {
-                    // Algoritmo já marcado como inviável — registra e conta como feito
                     execFeitas++;
-                    // Atualiza barra antes de pular (mostra que avançou)
-                    int rc = (execFeitas / MODOS.length); // rodadas completas estimadas
-                    imprimirBarra(totalExec, execFeitas, rc, rodadas,
+                    imprimirBarra(totalExec, execFeitas,
+                            execFeitas / MODOS.length, rodadas,
                             NOMES[a] + " [PULADO]", r, rodadas);
                     continue;
                 }
 
-                // Atualiza barra mostrando o que está prestes a executar
                 imprimirBarra(totalExec, execFeitas, rodadaCompleta, rodadas,
                         NOMES[a], r, rodadas);
 
                 Vertice[] backup = Grafos.clonarGrafo();
 
-                long ini = System.nanoTime();
-                CaminhoEuleriano.executar(MODOS[a]);
-                long fim = System.nanoTime();
-                long durNs = fim - ini;
+                // Reseta flag antes de cada execução
+                CaminhoEuleriano.cancelado = false;
 
+                final CaminhoEuleriano.Modo modo = MODOS[a];
+                long ini = System.nanoTime();
+
+                Future<?> future = exec.submit(() -> CaminhoEuleriano.executar(modo));
+
+                boolean timedOut = false;
+                try {
+                    future.get(60, TimeUnit.SECONDS);
+                } catch (TimeoutException e) {
+                    // Para o loop do Fleury na próxima verificação da flag
+                    CaminhoEuleriano.cancelado = true;
+                    future.cancel(true);
+                    // Aguarda a thread realmente parar antes de restaurar o grafo
+                    try { future.get(5, TimeUnit.SECONDS); } catch (Exception ignored) {}
+                    timedOut = true;
+                } catch (InterruptedException | ExecutionException e) {
+                    CaminhoEuleriano.cancelado = true;
+                    future.cancel(true);
+                    timedOut = true;
+                }
+
+                long durNs = System.nanoTime() - ini;
+
+                // Restaura o grafo sempre — independente de timeout ou sucesso
                 Grafos.restaurarGrafo(backup);
                 execFeitas++;
 
@@ -566,36 +604,36 @@ class Experimento {
                 double durS  = durNs / 1_000_000_000.0;
                 String status;
 
-                if (durNs > LIMITE_NS) {
-                    status = "INVIAVEL (>60s)";
-                    inviavel[a] = true;
+                if (timedOut) {
+                    status = "TIMEOUT — inviavel para este grafo";
+                    inviavel[algIdx] = true;
                 } else {
                     status = "ok";
-                    temposMs[a][contagem[a]] = durMs;
-                    contagem[a]++;
+                    temposMs[algIdx][contagem[algIdx]] = durMs;
+                    contagem[algIdx]++;
                 }
 
                 linhas.add(String.format("%-28s  %6d  %14.3f  %14.6f  %s",
                         NOMES[a], r, durMs, durS, status));
 
-                if (inviavel[a] && r < rodadas) {
+                if (timedOut && r < rodadas) {
                     linhas.add(String.format("%-28s  %6s  %14s  %14s  %s",
                             NOMES[a], (r + 1) + ".." + rodadas, "-", "-",
-                            "PULADO (limite excedido na rodada " + r + ")"));
+                            "PULADO (timeout na rodada " + r + ")"));
                 }
             }
 
-            // Rodada r concluída para todos os algoritmos
             rodadaCompleta = r;
             imprimirBarra(totalExec, execFeitas, rodadaCompleta, rodadas,
-                    (rodadaCompleta < rodadas) ? NOMES[0] : "concluido", rodadaCompleta, rodadas);
+                    rodadaCompleta < rodadas ? NOMES[0] : "concluido",
+                    rodadaCompleta, rodadas);
         }
 
-        // Quebra de linha após a barra
+        exec.shutdownNow();
+
         System.out.println();
         System.out.println();
 
-        // Adiciona médias ao arquivo
         linhas.add("-------------------------------------------------------------------");
         for (int a = 0; a < MODOS.length; a++) {
             linhas.add("");
@@ -607,11 +645,11 @@ class Experimento {
                         NOMES[a] + " [MEDIA]", "-", media, media / 1000.0, "-"));
             } else {
                 linhas.add(String.format("%-28s  %6s  %14s  %14s  %s",
-                        NOMES[a] + " [MEDIA]", "-", "-", "-", "todas inviáveis"));
+                        NOMES[a] + " [MEDIA]", "-", "-", "-",
+                        "sem dados (todas as rodadas excederam o limite)"));
             }
         }
 
-        // Grava tempos.txt
         try (PrintWriter pw = new PrintWriter(new BufferedWriter(new FileWriter("tempos.txt")))) {
             for (String l : linhas) pw.println(l);
             System.out.println("Resultados gravados em: "
@@ -710,7 +748,7 @@ public class Main {
         System.out.println("Algoritmo: " + nomeAlg);
         System.out.printf( "Tempo    : %.3f ms%n",  durNs / 1_000_000.0);
         System.out.printf( "Tempo    : %.6f s%n",   durNs / 1_000_000_000.0);
-        if (durNs > 60L * 1_000_000_000L)
+        if (durNs > 4L * 1_000_000_000L)
             System.out.println("AVISO: tempo excedeu 60 s — algoritmo inviavel para este grafo.");
     }
 

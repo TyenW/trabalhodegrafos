@@ -1,0 +1,45 @@
+Arquivo : grafo.txt
+Vertices: 10000
+Arestas : 34804
+Rodadas : 10
+Limite  : 60 s por rodada
+-------------------------------------------------------------------
+algoritmo                     rodada        tempo_ms         tempo_s  status
+-------------------------------------------------------------------
+naive-fleury                       1       38211,748       38,211748  ok
+tarjan-fleury-original             1       27621,374       27,621374  ok
+tarjan-fleury-otimizado            1       17293,797       17,293797  ok
+naive-fleury                       2       49970,689       49,970689  ok
+tarjan-fleury-original             2       27585,714       27,585714  ok
+tarjan-fleury-otimizado            2       15735,877       15,735877  ok
+naive-fleury                       3       49062,534       49,062534  ok
+tarjan-fleury-original             3       29217,055       29,217055  ok
+tarjan-fleury-otimizado            3       16890,016       16,890016  ok
+naive-fleury                       4       51245,770       51,245770  ok
+tarjan-fleury-original             4       29764,577       29,764577  ok
+tarjan-fleury-otimizado            4       16837,506       16,837506  ok
+naive-fleury                       5       51373,669       51,373669  ok
+tarjan-fleury-original             5       32431,399       32,431399  ok
+tarjan-fleury-otimizado            5       16852,841       16,852841  ok
+naive-fleury                       6       49430,787       49,430787  ok
+tarjan-fleury-original             6       28396,603       28,396603  ok
+tarjan-fleury-otimizado            6       15973,994       15,973994  ok
+naive-fleury                       7       49314,608       49,314608  ok
+tarjan-fleury-original             7       27086,214       27,086214  ok
+tarjan-fleury-otimizado            7       15783,838       15,783838  ok
+naive-fleury                       8       49484,775       49,484775  ok
+tarjan-fleury-original             8       30044,027       30,044027  ok
+tarjan-fleury-otimizado            8       15713,576       15,713576  ok
+naive-fleury                       9       47778,192       47,778192  ok
+tarjan-fleury-original             9       29876,151       29,876151  ok
+tarjan-fleury-otimizado            9       17452,770       17,452770  ok
+naive-fleury                      10       51440,600       51,440600  ok
+tarjan-fleury-original            10       29325,175       29,325175  ok
+tarjan-fleury-otimizado           10       16887,581       16,887581  ok
+-------------------------------------------------------------------
+
+naive-fleury [MEDIA]               -       48731,337       48,731337  -
+
+tarjan-fleury-original [MEDIA]       -       29134,829       29,134829  -
+
+tarjan-fleury-otimizado [MEDIA]       -       16542,179       16,542179  -
