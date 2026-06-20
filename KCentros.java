@@ -1,10 +1,10 @@
 import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicLong;
+import java.math.BigInteger;
 
 /**
- * Resolve o Problema dos k-Centros por dois metodos:
- *
- * 1. EXATO      - forca bruta C(n,k). Otimo garantido. Apenas para n pequeno.
- * 2. APROXIMADO - Greedy Farthest-Point. Raio <= 2x otimo. Rapido para n grande.
+ * Processamento Paralelo de K-Centros com Barra de Progresso Não-Bloqueante.
  */
 public class KCentros {
 
@@ -34,48 +34,99 @@ public class KCentros {
         }
     }
 
-    // METODO EXATO - O(C(n,k) x n x k)
-    public static Resultado exato(FloydWarshall fw, int k) {
+    /**
+     * MÉTODO EXATO PARALELO - Com Thread Monitora para Progresso
+     */
+    public static Resultado exato(FloydWarshall fw, int k, Resultado limiteAproximado) {
         int n = fw.tamanho();
-        long  melhorRaio      = Long.MAX_VALUE;
-        int[] melhoresCentros = null;
+        int cores = Runtime.getRuntime().availableProcessors();
+        ExecutorService executor = Executors.newFixedThreadPool(cores);
 
-        // 1. Calcular o total de combinações possíveis para o progresso
-        long totalCombinacoes = calcularCombinacao(n, k);
-        long iteracaoAtual = 0;
+        AtomicLong melhorRaioGlobal = new AtomicLong(limiteAproximado != null ? limiteAproximado.raio : Long.MAX_VALUE);
+        int[] melhoresCentrosGlobal = limiteAproximado != null ? Arrays.copyOf(limiteAproximado.centros, k) : new int[k];
+        Object lockEscrita = new Object();
 
-        int[] comb = new int[k];
-        inicializar(comb, k);
-        
-        // Mensagem inicial de progresso
-        System.out.print("Progresso do Método Exato: 0.00%\r");
+        // Variáveis para a barra de progresso
+        BigInteger totalCombinacoes = calcularCombinacao(n, k);
+        AtomicLong iteracoesConcluidas = new AtomicLong(0);
 
-        do {
-            long raio = calcularRaio(fw, n, comb);
-            if (raio < melhorRaio) {
-                melhorRaio      = raio;
-                melhoresCentros = Arrays.copyOf(comb, k);
+        // Thread Monitora: Imprime o progresso sem travar os cálculos
+        Thread monitorProgresso = new Thread(() -> {
+            while (!Thread.currentThread().isInterrupted()) {
+                long concluidas = iteracoesConcluidas.get();
+                double pct = totalCombinacoes.equals(BigInteger.ZERO) ? 100.0 : 
+                             (concluidas * 100.0) / totalCombinacoes.doubleValue();
+                
+                System.out.printf("\rProgresso do Método Exato: %.3f%%", pct);
+                
+                try {
+                    Thread.sleep(200); // Atualiza o terminal a cada 200ms
+                } catch (InterruptedException e) {
+                    break; // Sai do loop quando o processamento terminar
+                }
             }
-            
-            // 2. Incrementar o contador
-            iteracaoAtual++;
+        });
+        monitorProgresso.start();
 
-            // 3. Atualizar o terminal a cada 100 mil iterações ou no final
-            if (iteracaoAtual % 100000 == 0 || iteracaoAtual == totalCombinacoes) {
-                double porcentagem = ((double) iteracaoAtual / totalCombinacoes) * 100;
-                System.out.printf("Progresso do Método Exato: %.2f%% (%d/%d)\r", 
-                    porcentagem, iteracaoAtual, totalCombinacoes);
-            }
-            
-        } while (proximaCombinacao(comb, n, k));
+        List<Future<?>> tarefas = new ArrayList<>();
+
+        for (int s = 0; s <= n - k; s++) {
+            final int primeiroElemento = s;
+            tarefas.add(executor.submit(() -> {
+                int[] comb = new int[k];
+                comb[0] = primeiroElemento;
+                for (int i = 1; i < k; i++) comb[i] = primeiroElemento + i;
+
+                int[] melhorLocalCentros = null;
+                long melhorLocalRaio = melhorRaioGlobal.get();
+                long iteracoesLocais = 0; // Contador em lote (Evita gargalo no CPU)
+
+                do {
+                    long tetoAtual = melhorRaioGlobal.get();
+                    long raio = calcularRaioComPoda(fw, n, comb, tetoAtual);
+
+                    if (raio < tetoAtual) {
+                        melhorLocalRaio = raio;
+                        melhorLocalCentros = Arrays.copyOf(comb, k);
+
+                        while (raio < (tetoAtual = melhorRaioGlobal.get())) {
+                            if (melhorRaioGlobal.compareAndSet(tetoAtual, raio)) {
+                                synchronized (lockEscrita) {
+                                    System.arraycopy(melhorLocalCentros, 0, melhoresCentrosGlobal, 0, k);
+                                }
+                                break;
+                            }
+                        }
+                    }
+
+                    // Incremento do contador local para a barra de progresso
+                    iteracoesLocais++;
+                    if (iteracoesLocais >= 100_000) {
+                        iteracoesConcluidas.addAndGet(iteracoesLocais);
+                        iteracoesLocais = 0;
+                    }
+
+                } while (proximaCombinacaoRestrita(comb, n, k));
+                
+                // Adiciona o remanescente que sobrou na thread
+                if (iteracoesLocais > 0) {
+                    iteracoesConcluidas.addAndGet(iteracoesLocais);
+                }
+            }));
+        }
+
+        for (Future<?> f : tarefas) {
+            try { f.get(); } catch (Exception e) { e.printStackTrace(); }
+        }
         
-        // Quebra de linha ao finalizar para não sobrescrever a barra de progresso
-        System.out.println();
+        // Finaliza a barra de progresso de forma limpa
+        monitorProgresso.interrupt();
+        System.out.println("\rProgresso do Método Exato: 100.000%   ");
+        executor.shutdown();
 
-        return new Resultado(melhoresCentros, melhorRaio, "EXATO");
+        return new Resultado(melhoresCentrosGlobal, melhorRaioGlobal.get(), "EXATO_PARALELO");
     }
 
-    // METODO APROXIMADO - Greedy Farthest-Point, O(k x n)
     public static Resultado aproximado(FloydWarshall fw, int k) {
         int n = fw.tamanho();
         long[] minDist = new long[n];
@@ -104,10 +155,10 @@ public class KCentros {
             }
         }
 
-        return new Resultado(centros, calcularRaio(fw, n, centros), "APROXIMADO");
+        return new Resultado(centros, calcularRaioComPoda(fw, n, centros, Long.MAX_VALUE), "APROXIMADO");
     }
 
-    public static long calcularRaio(FloydWarshall fw, int n, int[] centros) {
+    private static long calcularRaioComPoda(FloydWarshall fw, int n, int[] centros, long limiteTeto) {
         long raio = Long.MIN_VALUE;
         for (int i = 0; i < n; i++) {
             long minLinha = Long.MAX_VALUE;
@@ -116,31 +167,28 @@ public class KCentros {
                 if (d < minLinha) minLinha = d;
             }
             if (minLinha > raio) raio = minLinha;
+            
+            if (raio >= limiteTeto) {
+                return Long.MAX_VALUE;
+            }
         }
         return raio;
     }
 
-    private static void inicializar(int[] comb, int k) {
-        for (int i = 0; i < k; i++) comb[i] = i;
-    }
-
-    private static boolean proximaCombinacao(int[] comb, int n, int k) {
+    private static boolean proximaCombinacaoRestrita(int[] comb, int n, int k) {
         int i = k - 1;
-        while (i >= 0 && comb[i] == n - k + i) i--;
-        if (i < 0) return false;
+        while (i > 0 && comb[i] == n - k + i) i--;
+        if (i == 0) return false;
         comb[i]++;
         for (int j = i + 1; j < k; j++) comb[j] = comb[j - 1] + 1;
         return true;
     }
     
-    // Método auxiliar para o cálculo do total de combinações
-    private static long calcularCombinacao(int n, int k) {
-        if (k > n - k) {
-            k = n - k;
-        }
-        long res = 1;
+    public static BigInteger calcularCombinacao(int n, int k) {
+        if (k > n - k) k = n - k;
+        BigInteger res = BigInteger.ONE;
         for (int i = 1; i <= k; i++) {
-            res = res * (n - i + 1) / i;
+            res = res.multiply(BigInteger.valueOf(n - i + 1)).divide(BigInteger.valueOf(i));
         }
         return res;
     }

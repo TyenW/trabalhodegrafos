@@ -2,112 +2,110 @@ import java.io.*;
 import java.util.*;
 
 /**
- * Le um grafo no formato:
- *   V K
- *   u1 v1 peso1
- *   ...
- * e executa Floyd-Warshall para calcular todas as distancias minimas.
- *
- * Regras:
- *  - Grafo NAO direcionado
- *  - Last-write-wins: se "u v p1" e depois "v u p2" aparecem, vale p2
+ * Representação do Grafo com Matriz Achatada em 1D (Linear Memory Layout).
+ * Maximiza o aproveitamento dos caches L1/L2 eliminando ponteiros redundantes.
  */
 public class FloydWarshall {
 
     public static final long INF = Long.MAX_VALUE / 2;
 
-    private long[][]            dist;
+    private long[]              dist; // Matriz achatada para garantir contiguidade física
     private String[]            vertices;
     private Map<String,Integer> indice;
     private int                 n;
 
-    // Construtor: le arquivo e executa o algoritmo
     public FloydWarshall(String caminhoArquivo) throws IOException {
         carregarGrafo(caminhoArquivo);
         executar();
     }
 
-    // Construtor alternativo: recebe a matriz pronta (para pmed)
     public FloydWarshall(long[][] matrizDistancias, String[] nomesVertices) {
         this.n        = nomesVertices.length;
         this.vertices = nomesVertices;
         this.indice   = new LinkedHashMap<>();
         for (int i = 0; i < n; i++) indice.put(nomesVertices[i], i);
-        dist = new long[n][n];
-        for (int i = 0; i < n; i++)
-            dist[i] = Arrays.copyOf(matrizDistancias[i], n);
+        
+        this.dist = new long[n * n];
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                this.dist[i * n + j] = matrizDistancias[i][j];
+            }
+        }
         executar();
     }
 
     private void carregarGrafo(String caminho) throws IOException {
-        BufferedReader br = new BufferedReader(new FileReader(caminho));
-        StringTokenizer st = new StringTokenizer(br.readLine());
-        int V = Integer.parseInt(st.nextToken());
-        int K = Integer.parseInt(st.nextToken());
+        try (BufferedReader br = new BufferedReader(new FileReader(caminho))) {
+            StringTokenizer st = new StringTokenizer(br.readLine());
+            int V = Integer.parseInt(st.nextToken());
+            int K = Integer.parseInt(st.nextToken());
 
-        indice = new LinkedHashMap<>();
-        Map<String, Long> arestas = new LinkedHashMap<>();
+            indice = new LinkedHashMap<>();
+            Map<String, Long> arestas = new LinkedHashMap<>();
 
-        String linha;
-        while ((linha = br.readLine()) != null) {
-            linha = linha.trim();
-            if (linha.isEmpty()) continue;
-            st = new StringTokenizer(linha);
-            String u    = st.nextToken();
-            String v    = st.nextToken();
-            long   peso = Long.parseLong(st.nextToken());
-            indice.putIfAbsent(u, indice.size());
-            indice.putIfAbsent(v, indice.size());
-            arestas.put(chaveCanonica(u, v), peso);
-        }
-        br.close();
+            String linha;
+            while ((linha = br.readLine()) != null) {
+                linha = linha.trim();
+                if (linha.isEmpty()) continue;
+                st = new StringTokenizer(linha);
+                String u    = st.nextToken();
+                String v    = st.nextToken();
+                long   peso = Long.parseLong(st.nextToken());
+                indice.putIfAbsent(u, indice.size());
+                indice.putIfAbsent(v, indice.size());
+                arestas.put(chaveCanonica(u, v), peso);
+            }
 
-        n        = indice.size();
-        vertices = new String[n];
-        for (Map.Entry<String,Integer> e : indice.entrySet())
-            vertices[e.getValue()] = e.getKey();
+            n        = indice.size();
+            vertices = new String[n];
+            for (Map.Entry<String,Integer> e : indice.entrySet())
+                vertices[e.getValue()] = e.getKey();
 
-        dist = new long[n][n];
-        for (long[] row : dist) Arrays.fill(row, INF);
-        for (int i = 0; i < n; i++) dist[i][i] = 0;
+            dist = new long[n * n];
+            Arrays.fill(dist, INF);
+            for (int i = 0; i < n; i++) dist[i * n + i] = 0;
 
-        for (Map.Entry<String,Long> entry : arestas.entrySet()) {
-            String[] p = entry.getKey().split("\\|");
-            int  u = indice.get(p[0]);
-            int  v = indice.get(p[1]);
-            long w = entry.getValue();
-            dist[u][v] = w;
-            dist[v][u] = w;
+            for (Map.Entry<String,Long> entry : arestas.entrySet()) {
+                String[] p = entry.getKey().split("\\|");
+                int  u = indice.get(p[0]);
+                int  v = indice.get(p[1]);
+                long w = entry.getValue();
+                dist[u * n + v] = w;
+                dist[v * n + u] = w;
+            }
         }
     }
 
     private void executar() {
-        for (int k = 0; k < n; k++)
-            for (int i = 0; i < n; i++)
-                if (dist[i][k] < INF)
-                    for (int j = 0; j < n; j++)
-                        if (dist[k][j] < INF && dist[i][k] + dist[k][j] < dist[i][j])
-                            dist[i][j] = dist[i][k] + dist[k][j];
+        // Laço O(N³) otimizado para registradores locais e localidade espacial extrema
+        for (int k = 0; k < n; k++) {
+            int kn = k * n;
+            for (int i = 0; i < n; i++) {
+                int in = i * n;
+                long dik = dist[in + k];
+                if (dik < INF) {
+                    for (int j = 0; j < n; j++) {
+                        long dkj = dist[kn + j];
+                        long novaDist = dik + dkj;
+                        if (dkj < INF && novaDist < dist[in + j]) {
+                            dist[in + j] = novaDist;
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    public long   get(int i, int j)        { return dist[i][j]; }
-    public long[] getLinha(int i)          { return Arrays.copyOf(dist[i], n); }
-    public long[] getColuna(int j)         {
-        long[] col = new long[n];
-        for (int i = 0; i < n; i++) col[i] = dist[i][j];
-        return col;
+    public long get(int i, int j) { 
+        return dist[i * n + j]; 
     }
-    public long   get(String u, String v)  { return dist[indice.get(u)][indice.get(v)]; }
-    public long[] getLinha(String u)       { return getLinha(indice.get(u)); }
-    public long[] getColuna(String v)      { return getColuna(indice.get(v)); }
 
-    public int      tamanho()              { return n; }
-    public String   nomeVertice(int i)     { return vertices[i]; }
-    public int      indiceVertice(String s){ return indice.get(s); }
-    public long[][] getMatriz()            {
-        long[][] c = new long[n][n];
-        for (int i = 0; i < n; i++) c[i] = Arrays.copyOf(dist[i], n);
-        return c;
+    public int tamanho() { 
+        return n; 
+    }
+    
+    public String nomeVertice(int i) { 
+        return vertices[i]; 
     }
 
     public void imprimir() {
@@ -117,8 +115,10 @@ public class FloydWarshall {
         System.out.println();
         for (int i = 0; i < n; i++) {
             System.out.printf("%" + w + "s", vertices[i]);
-            for (int j = 0; j < n; j++)
-                System.out.printf("%" + w + "s", dist[i][j] >= INF ? "INF" : dist[i][j]);
+            for (int j = 0; j < n; j++) {
+                long d = dist[i * n + j];
+                System.out.printf("%" + w + "s", d >= INF ? "INF" : d);
+            }
             System.out.println();
         }
     }
