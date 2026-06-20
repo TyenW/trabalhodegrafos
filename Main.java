@@ -1,6 +1,8 @@
 import java.io.*;
 import java.math.BigInteger;
+import java.nio.file.*;
 import java.util.*;
+import java.util.stream.Stream;
 
 public class Main {
 
@@ -10,18 +12,31 @@ public class Main {
         Scanner scanner = new Scanner(System.in);
 
         System.out.println("--- Sistema Ultra-Otimizado de K-Centros ---");
-        System.out.println("Buscando ficheiros .txt no diretório atual...\n");
+        System.out.println("Buscando ficheiros .txt no diretório atual e em TODAS as subpastas...\n");
 
-        File dir = new File(System.getProperty("user.dir"));
-        File[] arquivos = dir.listFiles((d, name) -> name.toLowerCase().endsWith(".txt"));
+        List<File> arquivosList = new ArrayList<>();
+        Path diretorioInicial = Paths.get(System.getProperty("user.dir"));
+
+        // Usando Files.walk para buscar recursivamente em todos os subdiretórios (Cross-platform: Windows/Linux)
+        try (Stream<Path> caminhos = Files.walk(diretorioInicial)) {
+            caminhos.filter(Files::isRegularFile)
+                    .filter(p -> p.toString().toLowerCase().endsWith(".txt"))
+                    .forEach(p -> arquivosList.add(p.toFile()));
+        } catch (IOException e) {
+            System.out.println("Erro ao buscar arquivos nas pastas: " + e.getMessage());
+            return;
+        }
+
+        File[] arquivos = arquivosList.toArray(new File[0]);
 
         if (arquivos == null || arquivos.length == 0) {
-            System.out.println("Nenhum ficheiro .txt encontrado no diretório atual.");
+            System.out.println("Nenhum ficheiro .txt encontrado no diretório atual ou subpastas.");
             return;
         }
 
         for (int i = 0; i < arquivos.length; i++) {
-            System.out.printf("[%d] %s%n", i + 1, arquivos[i].getName());
+            // Mostrando o caminho absoluto para diferenciar arquivos com o mesmo nome em pastas distintas
+            System.out.printf("[%d] %s%n", i + 1, arquivos[i].getAbsolutePath());
         }
 
         System.out.print("\nEscolha o número do ficheiro que deseja processar: ");
@@ -77,11 +92,11 @@ public class Main {
 
         BigInteger operacoes = KCentros.calcularCombinacao(n, k).multiply(BigInteger.valueOf((long) n * k));
         int cores = Runtime.getRuntime().availableProcessors();
-        double segundosPiorCenário = operacoes.doubleValue() / (OPERACOES_POR_SEGUNDO_NUCLEO * cores);
+        double segundosPiorCenario = operacoes.doubleValue() / (OPERACOES_POR_SEGUNDO_NUCLEO * cores);
 
         System.out.printf("  Núcleos lógicos detectados no sistema: %d%n", cores);
         System.out.printf("  Operações combinatórias estimadas: %s%n", formatarNumeroGrande(operacoes));
-        System.out.printf("  Tempo máximo teórico (Sem podas): %s%n", formatarTempo(segundosPiorCenário));
+        System.out.printf("  Tempo máximo teórico (Sem podas): %s%n", formatarTempo(segundosPiorCenario));
 
         System.out.print("\nDeseja disparar a execução concorrente por força bruta (EXATO)? (S/N): ");
         String continuar = scanner.next();
