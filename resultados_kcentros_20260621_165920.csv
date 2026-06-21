@@ -1,0 +1,4 @@
+Timestamp,NomeGrafo,NumVertices,NumK,Metodo,Raio,Centros,TempoExecucaoMs,EstimativaTempo,FatorPoda,TotalCombinacoes,NumCores,VelocidadeOpsS,GapAproximadoVsExato,GapPorcentagem
+2026-06-21 17:05:03,pmed1.txt,100,5,EXATO_PARALELO,127,"7;9;57;63;78",456,459 ms,0.4814,7.52 x 10^7,24,4049136,4,3.15%
+2026-06-21 17:06:40,pmed11.txt,300,5,EXATO_PARALELO,59,"16;21;143;163;203",97077,2.4 minutos,0.5819,1.95 x 10^10,24,4049136,1,1.69%
+2026-06-21 17:09:39,pmed16.txt,400,5,EXATO_PARALELO,47,"20;25;59;100;178",178540,10.4 minutos,0.5898,8.32 x 10^10,24,4049136,4,8.51%

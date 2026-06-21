@@ -1,13 +1,11 @@
 import java.io.*;
-import java.nio.file.*;
 import java.time.*;
 import java.time.format.*;
 import java.util.*;
 
 /**
- * Exporta resultados de execução para CSV de forma incremental.
- * Cada resultado é gravado imediatamente após a conclusão de cada grafo,
- * garantindo que interrupções não causem perda de dados.
+ * Exporta resultados para CSV de forma incremental.
+ * Cada resultado é gravado imediatamente após sua conclusão.
  */
 public class ExportadorCSV {
 
@@ -19,23 +17,25 @@ public class ExportadorCSV {
         "Metodo",
         "Raio",
         "Centros",
-        "TempoExecucaoMs",
-        "EstimativaTempo",
-        "FatorPoda",
+        "TempoRealMs",
+        "TempoRealFormatado",
+        "EstimativaSegundos",
+        "EstimativaFormatada",
+        "DiferencaEstimativaRealS",
+        "FatorPodaEstimado",
         "TotalCombinacoes",
         "NumCores",
-        "VelocidadeOpsS",
-        "GapAproximadoVsExato",
-        "GapPorcentagem"
+        "VelocidadeCalibradadOpsS",
+        "GapAproxVsExatoAbsoluto",
+        "GapAproxVsExatoPorcentagem"
     };
 
-    private final String caminhoArquivo;
-    private final DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private final String                 caminho;
+    private final DateTimeFormatter      fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    public ExportadorCSV(String caminhoArquivo) throws IOException {
-        this.caminhoArquivo = caminhoArquivo;
-        // Cria o arquivo com cabeçalho se ainda não existir
-        File f = new File(caminhoArquivo);
+    public ExportadorCSV(String caminho) throws IOException {
+        this.caminho = caminho;
+        File f = new File(caminho);
         if (!f.exists()) {
             try (PrintWriter pw = new PrintWriter(new FileWriter(f, false))) {
                 pw.println(String.join(",", CABECALHO));
@@ -46,83 +46,80 @@ public class ExportadorCSV {
         }
     }
 
-    /**
-     * Registra um resultado de execução. Chamado imediatamente após cada grafo.
-     */
     public synchronized void registrar(
-            String nomeGrafo,
-            int numVertices,
-            int k,
+            String             nomeGrafo,
+            int                numVertices,
+            int                k,
             KCentros.Resultado resultado,
-            long tempoMs,
-            EstimadorTempo.Estimativa estimativa,
-            Long gapAbsoluto,      // null se não aplicável
-            Double gapPorcentagem  // null se não aplicável
-    ) {
-        try (PrintWriter pw = new PrintWriter(new FileWriter(caminhoArquivo, true))) {
-            // Timestamp
-            String ts = LocalDateTime.now().format(fmt);
+            long               tempoRealMs,
+            EstimadorTempo.Estimativa estimativa,   // pode ser null (aproximado sem análise prévia)
+            Long               gapAbsoluto,
+            Double             gapPorcentagem) {
 
-            // Centros: lista separada por ;
-            StringBuilder centros = new StringBuilder();
-            for (int i = 0; i < resultado.centros.length; i++) {
-                if (i > 0) centros.append(";");
-                centros.append(resultado.centros[i] + 1);
-            }
+        try (PrintWriter pw = new PrintWriter(new FileWriter(caminho, true))) {
 
-            // Raio
-            String raioStr = (resultado.raio >= FloydWarshall.INF) ? "INF" : String.valueOf(resultado.raio);
+            String ts        = LocalDateTime.now().format(fmt);
+            String raio      = resultado.raio >= FloydWarshall.INF ? "INF" : String.valueOf(resultado.raio);
+            String centros   = centrosStr(resultado.centros);
+            String tempoFmt  = Main.formatSegundos(tempoRealMs / 1000.0);
 
-            // Estimativa
-            String estimStr = (estimativa != null)
-                ? EstimadorTempo.formatarTempo(estimativa.segundosEstimados) : "N/A";
-            String fatorPodaStr = (estimativa != null)
-                ? String.format("%.4f", estimativa.fatorPoda) : "N/A";
-            String totalCombStr = (estimativa != null)
-                ? EstimadorTempo.formatarNumeroGrande(estimativa.totalCombinacoes) : "N/A";
-            String coresStr = (estimativa != null)
-                ? String.valueOf(estimativa.cores) : "N/A";
-            String velStr = (estimativa != null)
-                ? String.format("%.0f", estimativa.opsCalibradas) : "N/A";
+            // Estimativa (pode ser null quando o aproximado é gravado antes da análise exata)
+            String estimSeg  = estimativa != null ? String.format("%.3f", estimativa.segundosEstimados) : "";
+            String estimFmt  = estimativa != null ? Main.formatSegundos(estimativa.segundosEstimados)   : "";
+            String difStr    = (estimativa != null)
+                ? String.format("%.3f", estimativa.segundosEstimados - tempoRealMs / 1000.0)
+                : "";
+            String fatorPoda = estimativa != null ? String.format("%.6f", estimativa.fatorPoda) : "";
+            String totalComb = estimativa != null
+                ? EstimadorTempo.formatarNumeroGrande(estimativa.totalCombinacoes) : "";
+            String cores     = estimativa != null ? String.valueOf(estimativa.cores) : "";
+            String vel       = estimativa != null ? String.format("%.0f", estimativa.opsCalibradas) : "";
 
-            // Gap
-            String gapAbsStr = (gapAbsoluto != null) ? String.valueOf(gapAbsoluto) : "N/A";
-            String gapPctStr = (gapPorcentagem != null) ? String.format("%.2f%%", gapPorcentagem) : "N/A";
+            String gapAbs    = gapAbsoluto    != null ? String.valueOf(gapAbsoluto)              : "";
+            String gapPct    = gapPorcentagem != null ? String.format("%.4f", gapPorcentagem)    : "";
 
-            String linha = csvEscape(ts) + ","
-                + csvEscape(nomeGrafo) + ","
-                + numVertices + ","
-                + k + ","
-                + csvEscape(resultado.metodo) + ","
-                + csvEscape(raioStr) + ","
-                + csvEscape("\"" + centros + "\"") + ","
-                + tempoMs + ","
-                + csvEscape(estimStr) + ","
-                + csvEscape(fatorPodaStr) + ","
-                + csvEscape(totalCombStr) + ","
-                + csvEscape(coresStr) + ","
-                + csvEscape(velStr) + ","
-                + csvEscape(gapAbsStr) + ","
-                + csvEscape(gapPctStr);
+            pw.println(
+                esc(ts)          + "," +
+                esc(nomeGrafo)   + "," +
+                numVertices      + "," +
+                k                + "," +
+                esc(resultado.metodo) + "," +
+                esc(raio)        + "," +
+                esc(centros)     + "," +
+                tempoRealMs      + "," +
+                esc(tempoFmt)    + "," +
+                esc(estimSeg)    + "," +
+                esc(estimFmt)    + "," +
+                esc(difStr)      + "," +
+                esc(fatorPoda)   + "," +
+                esc(totalComb)   + "," +
+                esc(cores)       + "," +
+                esc(vel)         + "," +
+                esc(gapAbs)      + "," +
+                esc(gapPct)
+            );
 
-            pw.println(linha);
-            System.out.printf("  [CSV] Resultado gravado para '%s' [%s]%n", nomeGrafo, resultado.metodo);
-
-        } catch (IOException e) {
-            System.err.println("  [CSV] ERRO ao gravar resultado: " + e.getMessage());
+        } catch (IOException ex) {
+            System.err.printf("  [CSV] ERRO ao gravar resultado de '%s': %s%n", nomeGrafo, ex.getMessage());
         }
     }
 
-    private static String csvEscape(String s) {
-        if (s == null) return "";
-        // Se já está entre aspas duplas, retorna como está
-        if (s.startsWith("\"") && s.endsWith("\"")) return s;
-        // Escapa vírgulas e aspas
-        if (s.contains(",") || s.contains("\"") || s.contains("\n")) {
-            return "\"" + s.replace("\"", "\"\"") + "\"";
+    private static String centrosStr(int[] centros) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < centros.length; i++) {
+            if (i > 0) sb.append(";");
+            sb.append(centros[i] + 1);
         }
+        return sb.toString();
+    }
+
+    /** Envolve em aspas duplas se contiver vírgula, aspas ou quebra de linha. */
+    private static String esc(String s) {
+        if (s == null || s.isEmpty()) return "";
+        if (s.contains(",") || s.contains("\"") || s.contains("\n"))
+            return "\"" + s.replace("\"", "\"\"") + "\"";
         return s;
     }
 
-    public String getCaminhoArquivo() { return caminhoArquivo; }
+    public String getCaminho() { return caminho; }
 }
