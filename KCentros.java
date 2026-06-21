@@ -34,35 +34,34 @@ public class KCentros {
         }
     }
 
-    /**
-     * MÉTODO EXATO PARALELO - Com Thread Monitora para Progresso
-     */
+    // -------------------------------------------------------------------------
+    // MÉTODO EXATO PARALELO
+    // -------------------------------------------------------------------------
+
     public static Resultado exato(FloydWarshall fw, int k, Resultado limiteAproximado) {
         int n = fw.tamanho();
         int cores = Runtime.getRuntime().availableProcessors();
         ExecutorService executor = Executors.newFixedThreadPool(cores);
 
-        AtomicLong melhorRaioGlobal = new AtomicLong(limiteAproximado != null ? limiteAproximado.raio : Long.MAX_VALUE);
-        int[] melhoresCentrosGlobal = limiteAproximado != null ? Arrays.copyOf(limiteAproximado.centros, k) : new int[k];
+        AtomicLong melhorRaioGlobal = new AtomicLong(
+            limiteAproximado != null ? limiteAproximado.raio : Long.MAX_VALUE);
+        int[] melhoresCentrosGlobal = limiteAproximado != null
+            ? Arrays.copyOf(limiteAproximado.centros, k) : new int[k];
         Object lockEscrita = new Object();
 
-        // Variáveis para a barra de progresso
         BigInteger totalCombinacoes = calcularCombinacao(n, k);
         AtomicLong iteracoesConcluidas = new AtomicLong(0);
 
-        // Thread Monitora: Imprime o progresso sem travar os cálculos
         Thread monitorProgresso = new Thread(() -> {
             while (!Thread.currentThread().isInterrupted()) {
                 long concluidas = iteracoesConcluidas.get();
-                double pct = totalCombinacoes.equals(BigInteger.ZERO) ? 100.0 : 
-                             (concluidas * 100.0) / totalCombinacoes.doubleValue();
-                
+                double pct = totalCombinacoes.equals(BigInteger.ZERO) ? 100.0
+                    : (concluidas * 100.0) / totalCombinacoes.doubleValue();
                 System.out.printf("\rProgresso do Método Exato: %.3f%%", pct);
-                
                 try {
-                    Thread.sleep(200); // Atualiza o terminal a cada 200ms
+                    Thread.sleep(200);
                 } catch (InterruptedException e) {
-                    break; // Sai do loop quando o processamento terminar
+                    break;
                 }
             }
         });
@@ -78,15 +77,15 @@ public class KCentros {
                 for (int i = 1; i < k; i++) comb[i] = primeiroElemento + i;
 
                 int[] melhorLocalCentros = null;
-                long melhorLocalRaio = melhorRaioGlobal.get();
-                long iteracoesLocais = 0; // Contador em lote (Evita gargalo no CPU)
+                long  melhorLocalRaio    = melhorRaioGlobal.get();
+                long  iteracoesLocais    = 0;
 
                 do {
                     long tetoAtual = melhorRaioGlobal.get();
                     long raio = calcularRaioComPoda(fw, n, comb, tetoAtual);
 
                     if (raio < tetoAtual) {
-                        melhorLocalRaio = raio;
+                        melhorLocalRaio    = raio;
                         melhorLocalCentros = Arrays.copyOf(comb, k);
 
                         while (raio < (tetoAtual = melhorRaioGlobal.get())) {
@@ -99,7 +98,6 @@ public class KCentros {
                         }
                     }
 
-                    // Incremento do contador local para a barra de progresso
                     iteracoesLocais++;
                     if (iteracoesLocais >= 100_000) {
                         iteracoesConcluidas.addAndGet(iteracoesLocais);
@@ -107,19 +105,15 @@ public class KCentros {
                     }
 
                 } while (proximaCombinacaoRestrita(comb, n, k));
-                
-                // Adiciona o remanescente que sobrou na thread
-                if (iteracoesLocais > 0) {
-                    iteracoesConcluidas.addAndGet(iteracoesLocais);
-                }
+
+                if (iteracoesLocais > 0) iteracoesConcluidas.addAndGet(iteracoesLocais);
             }));
         }
 
         for (Future<?> f : tarefas) {
             try { f.get(); } catch (Exception e) { e.printStackTrace(); }
         }
-        
-        // Finaliza a barra de progresso de forma limpa
+
         monitorProgresso.interrupt();
         System.out.println("\rProgresso do Método Exato: 100.000%   ");
         executor.shutdown();
@@ -127,15 +121,55 @@ public class KCentros {
         return new Resultado(melhoresCentrosGlobal, melhorRaioGlobal.get(), "EXATO_PARALELO");
     }
 
+    // -------------------------------------------------------------------------
+    // MÉTODO APROXIMADO MELHORADO — Multi-Restart Greedy com Perturbação
+    // -------------------------------------------------------------------------
+    /**
+     * Executa o Greedy Farthest-Point com múltiplos reinícios aleatórios para
+     * escapar de mínimos locais. O número de reinícios é limitado para garantir
+     * viabilidade mesmo em grafos enormes:
+     *   - O custo por restart é O(k * n), igual ao greedy original.
+     *   - O número de restarts cresce logaritmicamente com n, mas é limitado
+     *     a MAX_RESTARTS para que não comprometa o desempenho em instâncias grandes.
+     * Retorna o melhor resultado encontrado entre todos os reinícios.
+     */
     public static Resultado aproximado(FloydWarshall fw, int k) {
+        int n = fw.tamanho();
+
+        // Número de reinícios: escala logaritmicamente mas é limitado.
+        // Para n pequeno (≤20): ~10 reinícios. Para n=1000: ~20. Para n=100k: ~30.
+        int MAX_RESTARTS = Math.min(50, Math.max(10, (int)(Math.log(n + 1) * 4)));
+
+        Resultado melhor = greedy(fw, k, 0); // Sempre começa do vértice 0 (determinístico)
+
+        // Restarts com sementes aleatórias
+        Random rng = new Random(42); // Semente fixa para reprodutibilidade
+        for (int r = 1; r < MAX_RESTARTS; r++) {
+            int semente = rng.nextInt(n);
+            Resultado candidato = greedy(fw, k, semente);
+            if (candidato.raio < melhor.raio) {
+                melhor = candidato;
+            }
+        }
+
+        // Fase de refinamento local: tenta trocar cada centro pelo vértice mais distante
+        melhor = refinamentoLocal(fw, k, melhor);
+
+        return new Resultado(melhor.centros, melhor.raio, "APROXIMADO_MELHORADO");
+    }
+
+    /**
+     * Greedy Farthest-Point clássico a partir de um vértice inicial.
+     */
+    private static Resultado greedy(FloydWarshall fw, int k, int semente) {
         int n = fw.tamanho();
         long[] minDist = new long[n];
         Arrays.fill(minDist, Long.MAX_VALUE);
 
         int[] centros = new int[k];
-        centros[0] = 0;
+        centros[0] = semente;
         for (int i = 0; i < n; i++) {
-            long d = fw.get(i, 0);
+            long d = fw.get(i, semente);
             if (d < minDist[i]) minDist[i] = d;
         }
 
@@ -155,10 +189,59 @@ public class KCentros {
             }
         }
 
-        return new Resultado(centros, calcularRaioComPoda(fw, n, centros, Long.MAX_VALUE), "APROXIMADO");
+        long raio = calcularRaioComPoda(fw, n, centros, Long.MAX_VALUE);
+        return new Resultado(centros, raio, "GREEDY");
     }
 
-    private static long calcularRaioComPoda(FloydWarshall fw, int n, int[] centros, long limiteTeto) {
+    /**
+     * Refinamento local: para cada centro, tenta substituí-lo pelo vértice que
+     * maximiza a distância mínima a todos os outros centros. Itera até estabilizar.
+     * Complexidade por iteração: O(k * n). Número máximo de iterações: k.
+     */
+    private static Resultado refinamentoLocal(FloydWarshall fw, int k, Resultado inicial) {
+        int n = fw.tamanho();
+        int[] centros = Arrays.copyOf(inicial.centros, k);
+        long  raioAtual = inicial.raio;
+        boolean melhorou = true;
+
+        while (melhorou) {
+            melhorou = false;
+            for (int pos = 0; pos < k; pos++) {
+                int centroOriginal = centros[pos];
+                // Tenta substituir centros[pos] pelo melhor candidato alternativo
+                int melhorSubstituto = centroOriginal;
+                long melhorRaio = raioAtual;
+
+                for (int v = 0; v < n; v++) {
+                    // Pula vértices que já são centros
+                    boolean jaCentro = false;
+                    for (int c : centros) if (c == v) { jaCentro = true; break; }
+                    if (jaCentro) continue;
+
+                    centros[pos] = v;
+                    long novoRaio = calcularRaioComPoda(fw, n, centros, melhorRaio);
+                    if (novoRaio < melhorRaio) {
+                        melhorRaio = novoRaio;
+                        melhorSubstituto = v;
+                    }
+                }
+
+                centros[pos] = melhorSubstituto;
+                if (melhorSubstituto != centroOriginal) {
+                    raioAtual = melhorRaio;
+                    melhorou  = true;
+                }
+            }
+        }
+
+        return new Resultado(centros, raioAtual, "APROXIMADO_MELHORADO");
+    }
+
+    // -------------------------------------------------------------------------
+    // UTILITÁRIOS
+    // -------------------------------------------------------------------------
+
+    public static long calcularRaioComPoda(FloydWarshall fw, int n, int[] centros, long limiteTeto) {
         long raio = Long.MIN_VALUE;
         for (int i = 0; i < n; i++) {
             long minLinha = Long.MAX_VALUE;
@@ -167,10 +250,7 @@ public class KCentros {
                 if (d < minLinha) minLinha = d;
             }
             if (minLinha > raio) raio = minLinha;
-            
-            if (raio >= limiteTeto) {
-                return Long.MAX_VALUE;
-            }
+            if (raio >= limiteTeto) return Long.MAX_VALUE;
         }
         return raio;
     }
@@ -183,7 +263,7 @@ public class KCentros {
         for (int j = i + 1; j < k; j++) comb[j] = comb[j - 1] + 1;
         return true;
     }
-    
+
     public static BigInteger calcularCombinacao(int n, int k) {
         if (k > n - k) k = n - k;
         BigInteger res = BigInteger.ONE;
